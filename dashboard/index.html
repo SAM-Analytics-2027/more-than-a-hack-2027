@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confronto Possesso</title>
+  <style>
+    :root {
+      --bg: #f3f5f8;
+      --card: #ffffff;
+      --border: #d8e0ea;
+      --border-soft: #e8eef5;
+      --text: #0f172a;
+      --text-sec: #334155;
+      --muted: #64748b;
+
+      --barca: #2563eb;
+      --athletic: #ea580c;
+      --dead: #94a3b8;
+      --ungraded: #e2e8f0;
+
+      --ok: #16a34a;
+      --err: #dc2626;
+      --primary: #2563eb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.45;
+      font-variant-numeric: tabular-nums;
+      padding: 16px 22px 36px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .section-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-title-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title-group h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .context-pill {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-sec);
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+
+    /* Buttons */
+    button {
+      background: #ffffff;
+      color: var(--text-sec);
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    button:hover { background: #f1f5f9; border-color: #94a3b8; }
+    button.active-preset {
+      background: #eff6ff;
+      border-color: #2563eb;
+      color: #1d4ed8;
+    }
+
+    /* Timeline Controls & Legend */
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+    }
+
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      font-size: 13px;
+      color: var(--text-sec);
+    }
+    .leg-item { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+    .swatch {
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      display: inline-block;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+    }
+
+    .model-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .toggle-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 4px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .toggle-chip:hover { background: #f1f5f9; }
+    .toggle-chip input { accent-color: var(--primary); cursor: pointer; }
+
+    .canvas-wrap {
+      position: relative;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #ffffff;
+      cursor: grab;
+    }
+    .canvas-wrap:active { cursor: grabbing; }
+    canvas#timelineCanvas { display: block; width: 100%; }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 11px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-soft);
+      vertical-align: middle;
+    }
+    th {
+      background: #f8fafc;
+      color: var(--text-sec);
+      font-size: 13px;
+      font-weight: 700;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    th.num, td.num { text-align: right; }
+
+    tbody tr:hover { background: #f8fafc; }
+
+    tr.gt-ref-row {
+      background: #fefce8 !important;
+    }
+    tr.gt-ref-row td {
+      border-bottom: 2px solid #facc15;
+    }
+    tr.selected-row {
+      background: #eff6ff !important;
+    }
+
+    .val-main {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .val-sub {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    .tag-ours {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      background: #dbeafe;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: 1px;
+    }
+    .tag-gt {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      background: #fef08a;
+      color: #854d0e;
+      border: 1px solid #facc15;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: 1px;
+    }
+
+    .diff-pill {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 5px;
+      margin-left: 5px;
+    }
+    .diff-good { background: #dcfce7; color: #15803d; }
+    .diff-warn { background: #fef3c7; color: #b45309; }
+    .diff-bad  { background: #fee2e2; color: #b91c1c; }
+
+    /* Tooltip */
+    .hover-tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #ffffff;
+      color: var(--text);
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+      z-index: 999;
+      display: none;
+      min-width: 245px;
+    }
+    .tt-title {
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+    }
+    .tt-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      padding: 2px 0;
+    }
+    .pill {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 12px;
+      color: #ffffff;
+    }
+    .pill-H { background: var(--barca); }
+    .pill-A { background: var(--athletic); }
+    .pill-D { background: #64748b; }
+    .pill-X { background: #e2e8f0; color: #475569; }
+  </style>
+</head>
+<body>
+
+  <!-- 1. CONFRONTO TEMPORALE (STRISCE) -->
+  <section class="card">
+    <div class="section-top">
+      <div class="section-title-group">
+        <h2>Confronto Temporale</h2>
+        <span class="context-pill" id="rangeInfo"></span>
+      </div>
+      <div class="legend-bar">
+        <span class="leg-item"><span class="swatch" style="background:var(--barca)"></span> Barcellona (H)</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--athletic)"></span> Bilbao (A)</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--dead)"></span> Gioco Fermo (D)</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--ok)"></span> Corretto</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--err)"></span> Errore</span>
+      </div>
+    </div>
+
+    <div class="controls-row">
+      <div class="btn-group">
+        <button id="btnPreset5m" class="active-preset">Primi 5 Minuti (Soluzione Vera)</button>
+        <button id="btnPresetH1">1° Tempo</button>
+        <button id="btnPresetH2">2° Tempo</button>
+        <button id="btnPresetAll">Intero Video</button>
+      </div>
+      <div class="btn-group">
+        <button id="btnZoomIn">Zoom +</button>
+        <button id="btnZoomOut">Zoom −</button>
+        <button id="btnResetZoom">Reset</button>
+      </div>
+    </div>
+
+    <div class="model-toggles" id="modelToggles"></div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="timelineCanvas" height="320"></canvas>
+    </div>
+  </section>
+
+  <!-- 2. TABELLA PRIMI 5 MINUTI (VS SOLUZIONE VERA) -->
+  <section class="card">
+    <div class="section-top">
+      <div class="section-title-group">
+        <h2>Primi 5 Minuti — Scostamento dalla Soluzione Vera</h2>
+        <span class="context-pill">1°T 00:00 → 05:00 · 7.500 frame · 300,0 s</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="table5m">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th class="num">Voto Azioni (spellF1)</th>
+            <th class="num">Voto Frame (macroF1)</th>
+            <th>Frame Uguali / Errori</th>
+            <th>Azioni Individuate (H+A)</th>
+            <th>Cambi di Stato</th>
+            <th class="num">Barça (H)</th>
+            <th class="num">Bilbao (A)</th>
+            <th class="num">Gioco Fermo (D)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. TABELLA INTERA PARTITA -->
+  <section class="card">
+    <div class="section-top">
+      <div class="section-title-group">
+        <h2>Intera Partita — 1° Tempo + 2° Tempo</h2>
+        <span class="context-pill">158.857 frame valutati · 105,9 min</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="tableFull">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Azioni Totali (H+A)</th>
+            <th class="num">Durata Media Azione</th>
+            <th class="num">Cambi di Stato Totali</th>
+            <th class="num">Barça (H)</th>
+            <th class="num">Bilbao (A)</th>
+            <th class="num">Gioco Fermo (D)</th>
+            <th class="num">Possesso Vivo (H / A)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="hover-tooltip" id="tooltip"></div>
+
+  <script>
+    const CODE_NAMES = ["H", "A", "D", "X"];
+    const CODE_LABELS_IT = {
+      0: "H · Barcellona",
+      1: "A · Bilbao",
+      2: "D · Gioco Fermo",
+      3: "X · Non valutato"
+    };
+    const CODE_COLORS = {
+      0: "#2563eb",
+      1: "#ea580c",
+      2: "#94a3b8",
+      3: "#e2e8f0"
+    };
+
+    let DATA = null;
+    let selectedModel = "";
+    let visibleModels = new Set();
+
+    let viewStart = 11185;
+    let viewEnd = 18685;
+    let currentPreset = "5m";
+
+    const LABEL_COL_W = 276;
+    const RIGHT_PAD = 14;
+
+    function codeAtFrame(rle, frame) {
+      let lo = 0, hi = rle.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const seg = rle[mid];
+        if (frame < seg[0]) hi = mid - 1;
+        else if (frame >= seg[1]) lo = mid + 1;
+        else return seg[2];
+      }
+      return 3;
+    }
+
+    function windowStatsFromRle(rle, vStart, vEnd) {
+      const a = Math.max(0, Math.floor(vStart));
+      const b = Math.min(DATA.n_frames, Math.ceil(vEnd));
+      if (b <= a) return { actions: 0, changes: 0, hasGraded: false };
+
+      let lo = 0, hi = rle.length - 1, idx = 0;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (rle[mid][1] <= a) lo = mid + 1;
+        else { idx = mid; hi = mid - 1; }
+      }
+
+      let actions = 0;
+      let changes = 0;
+      let prevGradedCode = -1;
+      let hasGraded = false;
+
+      for (let i = idx; i < rle.length; i++) {
+        const [s, e, code] = rle[i];
+        if (s >= b) break;
+        if (code === 3) {
+          prevGradedCode = -1;
+          continue;
+        }
+        hasGraded = true;
+        if (code === 0 || code === 1) actions++;
+        if (prevGradedCode !== -1 && code !== prevGradedCode) changes++;
+        prevGradedCode = code;
+      }
+      return { actions, changes, hasGraded };
+    }
+
+    function windowAgreementPct(gtRle, predRle, vStart, vEnd) {
+      const pubS = DATA.public_window.start;
+      const pubE = DATA.public_window.end;
+      const a = Math.max(Math.floor(vStart), pubS);
+      const b = Math.min(Math.ceil(vEnd), pubE);
+      if (b <= a) return null;
+
+      let i = 0, j = 0;
+      while (i < gtRle.length && gtRle[i][1] <= a) i++;
+      while (j < predRle.length && predRle[j][1] <= a) j++;
+
+      let cur = a, same = 0, tot = 0;
+      while (cur < b && i < gtRle.length && j < predRle.length) {
+        const g = gtRle[i];
+        const p = predRle[j];
+        const nextEnd = Math.min(b, g[1], p[1]);
+        if (nextEnd > cur && g[2] !== 3) {
+          const len = nextEnd - cur;
+          tot += len;
+          if (g[2] === p[2]) same += len;
+        }
+        cur = nextEnd;
+        if (g[1] <= cur) i++;
+        if (p[1] <= cur) j++;
+      }
+      return tot > 0 ? (100.0 * same / tot) : null;
+    }
+
+    function formatVideoTime(frame, fps) {
+      const totalSec = frame / fps;
+      const mins = Math.floor(totalSec / 60);
+      const secs = (totalSec % 60).toFixed(1).padStart(4, "0");
+      return `${String(mins).padStart(2, "0")}:${secs}`;
+    }
+
+    function formatMatchClock(frame, fps) {
+      if (!DATA) return "";
+      const h1 = DATA.halves[0];
+      const h2 = DATA.halves[1];
+      if (frame >= h1.start && frame <= h1.end) {
+        const s = (frame - h1.start) / fps;
+        return `1°T ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+      }
+      if (frame >= h2.start && frame <= h2.end) {
+        const ko2 = 113742;
+        if (frame < ko2) {
+          const rem = Math.ceil((ko2 - frame) / fps);
+          return `Pre-2°T (−${rem}s)`;
+        }
+        const s = 45 * 60 + (frame - ko2) / fps;
+        return `2°T ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+      }
+      return `Video ${formatVideoTime(frame, fps)}`;
+    }
+
+    function signedInt(n) {
+      return n > 0 ? `+${n}` : `${n}`;
+    }
+
+    function signedSec(x) {
+      const s = x >= 0 ? "+" : "";
+      return `${s}${x.toFixed(1)}s`;
+    }
+
+    function diffBadgeInt(diff, goodTol = 3, warnTol = 10) {
+      const a = Math.abs(diff);
+      const cls = a <= goodTol ? "diff-good" : (a <= warnTol ? "diff-warn" : "diff-bad");
+      const txt = diff === 0 ? "0" : signedInt(diff);
+      return `<span class="diff-pill ${cls}">${txt}</span>`;
+    }
+
+    function diffBadgeSec(diff, goodTol = 4.0, warnTol = 15.0) {
+      const a = Math.abs(diff);
+      const cls = a <= goodTol ? "diff-good" : (a <= warnTol ? "diff-warn" : "diff-bad");
+      return `<span class="diff-pill ${cls}">${signedSec(diff)}</span>`;
+    }
+
+    async function loadData() {
+      const res = await fetch("/api/data");
+      DATA = await res.json();
+      const subs = DATA.submissions;
+      if (subs.length) {
+        const ours = subs.find(s => !s.is_baseline);
+        selectedModel = ours ? ours.name : subs[0].name;
+        subs.forEach(s => visibleModels.add(s.name));
+      }
+      renderAll();
+    }
+
+    function setPreset(which) {
+      currentPreset = which;
+      document.querySelectorAll(".controls-row .btn-group:first-child button").forEach(b => b.classList.remove("active-preset"));
+      if (which === "5m") {
+        viewStart = DATA.public_window.start;
+        viewEnd = DATA.public_window.end;
+        document.getElementById("btnPreset5m").classList.add("active-preset");
+      } else if (which === "h1") {
+        viewStart = DATA.halves[0].start;
+        viewEnd = DATA.halves[0].end;
+        document.getElementById("btnPresetH1").classList.add("active-preset");
+      } else if (which === "h2") {
+        viewStart = DATA.halves[1].start;
+        viewEnd = DATA.halves[1].end;
+        document.getElementById("btnPresetH2").classList.add("active-preset");
+      } else {
+        viewStart = 0;
+        viewEnd = DATA.n_frames;
+        document.getElementById("btnPresetAll").classList.add("active-preset");
+      }
+      drawTimeline();
+    }
+
+    function renderToggles() {
+      const wrap = document.getElementById("modelToggles");
+      wrap.innerHTML = DATA.submissions.map(s => `
+        <label class="toggle-chip">
+          <input type="checkbox" data-model="${s.name}" ${visibleModels.has(s.name) ? "checked" : ""} />
+          <span>${s.name}${s.is_baseline ? "" : '<span class="tag-ours">NOSTRO</span>'}</span>
+        </label>
+      `).join("");
+
+      wrap.querySelectorAll("input[data-model]").forEach(inp => {
+        inp.addEventListener("change", e => {
+          const m = e.target.getAttribute("data-model");
+          if (e.target.checked) visibleModels.add(m);
+          else visibleModels.delete(m);
+          drawTimeline();
+        });
+      });
+    }
+
+    function drawRleRow(ctx, rle, vStart, vEnd, xLeft, plotW, yTop, rowH) {
+      const span = vEnd - vStart;
+      let lo = 0, hi = rle.length - 1, startIdx = 0;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (rle[mid][1] <= vStart) lo = mid + 1;
+        else { startIdx = mid; hi = mid - 1; }
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(xLeft, yTop, plotW, rowH);
+      ctx.clip();
+
+      for (let i = startIdx; i < rle.length; i++) {
+        const [s, e, code] = rle[i];
+        if (s >= vEnd) break;
+        const cs = Math.max(s, vStart);
+        const ce = Math.min(e, vEnd);
+        const x1 = xLeft + ((cs - vStart) / span) * plotW;
+        const x2 = xLeft + ((ce - vStart) / span) * plotW;
+        const w = Math.max(0.8, x2 - x1);
+
+        ctx.fillStyle = CODE_COLORS[code] || "#e2e8f0";
+        ctx.fillRect(x1, yTop, w, rowH);
+
+        if (w >= 4 && cs === s && s > vStart) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+          ctx.fillRect(x1, yTop, 1, rowH);
+        }
+
+        if (code !== 3 && w >= 30) {
+          const durSec = ((e - s) / DATA.fps).toFixed(0);
+          const lbl = w >= 72 ? `${CODE_NAMES[code]} (${durSec}s)` : CODE_NAMES[code];
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+          ctx.fillText(lbl, x1 + 6, yTop + rowH / 2 + 4);
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawAgreementStrip(ctx, gtRle, predRle, vStart, vEnd, xLeft, plotW, yTop, stripH) {
+      const pubS = DATA.public_window.start;
+      const pubE = DATA.public_window.end;
+      const aStart = Math.max(vStart, pubS);
+      const aEnd = Math.min(vEnd, pubE);
+      if (aEnd <= aStart) return;
+
+      const span = vEnd - vStart;
+      let i = 0, j = 0;
+      while (i < gtRle.length && gtRle[i][1] <= aStart) i++;
+      while (j < predRle.length && predRle[j][1] <= aStart) j++;
+
+      let cur = aStart;
+      while (cur < aEnd && i < gtRle.length && j < predRle.length) {
+        const g = gtRle[i];
+        const p = predRle[j];
+        const nextEnd = Math.min(aEnd, g[1], p[1]);
+        if (nextEnd > cur && g[2] !== 3) {
+          const x1 = xLeft + ((cur - vStart) / span) * plotW;
+          const x2 = xLeft + ((nextEnd - vStart) / span) * plotW;
+          ctx.fillStyle = (g[2] === p[2]) ? "#16a34a" : "#dc2626";
+          ctx.fillRect(x1, yTop, Math.max(0.8, x2 - x1), stripH);
+        }
+        cur = nextEnd;
+        if (g[1] <= cur) i++;
+        if (p[1] <= cur) j++;
+      }
+    }
+
+    function drawTimeline() {
+      if (!DATA) return;
+      const canvas = document.getElementById("timelineCanvas");
+      const wrap = document.getElementById("canvasWrap");
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = wrap.clientWidth;
+
+      const activeSubs = DATA.submissions.filter(s => visibleModels.has(s.name));
+
+      const axisH = 34;
+      const gtRowH = 52;
+      const subRowH = 54;
+      const cssH = axisH + gtRowH + activeSubs.length * subRowH;
+
+      canvas.style.height = cssH + "px";
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, cssW, cssH);
+
+      const plotW = Math.max(100, cssW - LABEL_COL_W - RIGHT_PAD);
+      const span = viewEnd - viewStart;
+      const secSpan = span / DATA.fps;
+
+      document.getElementById("rangeInfo").textContent =
+        `${formatMatchClock(Math.round(viewStart), DATA.fps)} → ${formatMatchClock(Math.round(viewEnd), DATA.fps)} · ${secSpan < 180 ? secSpan.toFixed(1) + ' s' : (secSpan / 60).toFixed(1) + ' min'}`;
+
+      // Header row
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(0, 0, cssW, axisH);
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.beginPath();
+      ctx.moveTo(0, axisH);
+      ctx.lineTo(cssW, axisH);
+      ctx.stroke();
+
+      ctx.fillStyle = "#334155";
+      ctx.font = "bold 12.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText("File (Azioni · Cambi nel tratto)", 12, 22);
+
+      // Time ticks
+      const targetTicks = Math.max(4, Math.floor(plotW / 120));
+      const rawStepSec = (span / DATA.fps) / targetTicks;
+      const niceSteps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900];
+      const stepSec = niceSteps.find(s => s >= rawStepSec) || 1200;
+      const stepFrames = stepSec * DATA.fps;
+      const firstTick = Math.ceil(viewStart / stepFrames) * stepFrames;
+
+      ctx.font = "600 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      for (let f = firstTick; f <= viewEnd; f += stepFrames) {
+        const x = LABEL_COL_W + ((f - viewStart) / span) * plotW;
+        ctx.strokeStyle = "#e2e8f0";
+        ctx.beginPath();
+        ctx.moveTo(x, axisH);
+        ctx.lineTo(x, cssH);
+        ctx.stroke();
+        ctx.fillStyle = "#475569";
+        ctx.fillText(formatMatchClock(f, DATA.fps), x + 5, 22);
+      }
+
+      const pubS = DATA.public_window.start;
+      const pubE = DATA.public_window.end;
+      const fullyInsideGt = Math.floor(viewStart) >= pubS && Math.ceil(viewEnd) <= pubE;
+
+      let y = axisH;
+
+      // 1. Soluzione Vera Row
+      ctx.fillStyle = "#fefce8";
+      ctx.fillRect(0, y, cssW, gtRowH);
+      ctx.strokeStyle = "#facc15";
+      ctx.beginPath();
+      ctx.moveTo(0, y + gtRowH);
+      ctx.lineTo(cssW, y + gtRowH);
+      ctx.stroke();
+
+      const gtWinSt = windowStatsFromRle(DATA.gt_rle, viewStart, viewEnd);
+      ctx.fillStyle = "#854d0e";
+      ctx.font = "bold 13.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText("★ Soluzione Vera (5 min)", 12, y + 22);
+      ctx.fillStyle = "#a16207";
+      ctx.font = "600 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText(
+        gtWinSt.hasGraded ? `${gtWinSt.actions} azioni · ${gtWinSt.changes} cambi` : "Non presente in questo tratto",
+        12,
+        y + 40
+      );
+
+      drawRleRow(ctx, DATA.gt_rle, viewStart, viewEnd, LABEL_COL_W, plotW, y + 9, gtRowH - 18);
+      ctx.strokeStyle = "#eab308";
+      ctx.strokeRect(LABEL_COL_W, y + 9, plotW, gtRowH - 18);
+      y += gtRowH;
+
+      // 2. Submission Rows
+      activeSubs.forEach(sub => {
+        const isSel = sub.name === selectedModel;
+        if (isSel) {
+          ctx.fillStyle = "#eff6ff";
+          ctx.fillRect(0, y, cssW, subRowH);
+        }
+
+        ctx.strokeStyle = "#e8eef5";
+        ctx.beginPath();
+        ctx.moveTo(0, y + subRowH);
+        ctx.lineTo(cssW, y + subRowH);
+        ctx.stroke();
+
+        ctx.fillStyle = isSel ? "#1d4ed8" : "#0f172a";
+        ctx.font = "bold 13.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+        ctx.fillText(sub.name, 12, y + 21);
+
+        const st = windowStatsFromRle(sub.rle, viewStart, viewEnd);
+        const agree = windowAgreementPct(DATA.gt_rle, sub.rle, viewStart, viewEnd);
+
+        let subLine = "";
+        if (fullyInsideGt && gtWinSt.hasGraded) {
+          const dA = signedInt(st.actions - gtWinSt.actions);
+          const dC = signedInt(st.changes - gtWinSt.changes);
+          subLine = `${st.actions} az. (${dA}) · ${st.changes} cambi (${dC}) · ${agree !== null ? agree.toFixed(1) + '%' : ''}`;
+        } else {
+          subLine = `${st.actions} azioni · ${st.changes} cambi`;
+          if (agree !== null) subLine += ` · 5m: ${agree.toFixed(1)}%`;
+        }
+
+        ctx.fillStyle = "#64748b";
+        ctx.font = "500 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+        ctx.fillText(subLine, 12, y + 40);
+
+        const barH = 28;
+        const barY = y + 8;
+        drawRleRow(ctx, sub.rle, viewStart, viewEnd, LABEL_COL_W, plotW, barY, barH);
+        ctx.strokeStyle = "#cbd5e1";
+        ctx.strokeRect(LABEL_COL_W, barY, plotW, barH);
+
+        drawAgreementStrip(ctx, DATA.gt_rle, sub.rle, viewStart, viewEnd, LABEL_COL_W, plotW, barY + barH + 3, 6);
+
+        y += subRowH;
+      });
+
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.beginPath();
+      ctx.moveTo(LABEL_COL_W, 0);
+      ctx.lineTo(LABEL_COL_W, cssH);
+      ctx.stroke();
+    }
+
+    function renderTable5m() {
+      const g = DATA.public_window;
+      const tbody = document.querySelector("#table5m tbody");
+
+      let html = `
+        <tr class="gt-ref-row">
+          <td>
+            <div class="val-main">BAR-ATH_possession_gt_public <span class="tag-gt">SOLUZIONE VERA</span></div>
+          </td>
+          <td class="num"><div class="val-main">100,0</div></td>
+          <td class="num"><div class="val-main">100,0</div></td>
+          <td>
+            <div class="val-main">100,0% uguali</div>
+            <div class="val-sub">0,0s di errore (7.500 / 7.500 frame)</div>
+          </td>
+          <td>
+            <div class="val-main">${g.n_spells} azioni</div>
+            <div class="val-sub">${g.n_spells_H} Barça · ${g.n_spells_A} Bilbao · media ${g.mean_dur_s.toFixed(1)}s</div>
+          </td>
+          <td>
+            <div class="val-main">${g.n_transitions} cambi</div>
+            <div class="val-sub">${g.n_dead_blocks} periodi di gioco fermo</div>
+          </td>
+          <td class="num">
+            <div class="val-main">${g.sec_H.toFixed(1)} s</div>
+            <div class="val-sub">${g.pct_H.toFixed(1)}%</div>
+          </td>
+          <td class="num">
+            <div class="val-main">${g.sec_A.toFixed(1)} s</div>
+            <div class="val-sub">${g.pct_A.toFixed(1)}%</div>
+          </td>
+          <td class="num">
+            <div class="val-main">${g.sec_D.toFixed(1)} s</div>
+            <div class="val-sub">${g.pct_D.toFixed(1)}%</div>
+          </td>
+        </tr>
+      `;
+
+      html += DATA.submissions.map(s => {
+        const isSel = s.name === selectedModel;
+        const spell = (s.spell_f1_mean * 100).toFixed(1);
+        const macro = (s.macro_f1 * 100).toFixed(1);
+
+        let errDetail = `Squadra: ${s.err_swap_ha_s.toFixed(1)}s · Fermo: ${s.err_dead_alive_s.toFixed(1)}s`;
+        if (s.err_abstain_x_s > 0.05) {
+          errDetail += ` · X: ${s.err_abstain_x_s.toFixed(1)}s`;
+        }
+
+        return `
+          <tr class="${isSel ? 'selected-row' : ''}" data-pick="${s.name}" style="cursor:pointer">
+            <td>
+              <div class="val-main">#${s.rank} · ${s.name}${s.is_baseline ? '' : '<span class="tag-ours">NOSTRO</span>'}</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${spell}</div>
+              <div class="val-sub">IoU 50%: ${(s.spell_f1_iou50 * 100).toFixed(1)}</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${macro}</div>
+              <div class="val-sub">F1 D: ${(s.per_class.D.f1 * 100).toFixed(1)}</div>
+            </td>
+            <td>
+              <div class="val-main">${s.accuracy_pct.toFixed(1)}% <span class="diff-pill ${s.err_s <= 60 ? 'diff-good' : (s.err_s <= 88 ? 'diff-warn' : 'diff-bad')}">errore ${s.err_s.toFixed(1)}s</span></div>
+              <div class="val-sub">${errDetail}</div>
+            </td>
+            <td>
+              <div class="val-main">${s.n_spells_5m} azioni ${diffBadgeInt(s.diff_spells_5m, 3, 10)}</div>
+              <div class="val-sub">Centrate ${s.spells_matched_50}/${g.n_spells} · media ${s.mean_dur_5m_s.toFixed(1)}s (${signedSec(s.diff_dur_5m_s)})</div>
+            </td>
+            <td>
+              <div class="val-main">${s.n_trans_5m} cambi ${diffBadgeInt(s.diff_trans_5m, 5, 18)}</div>
+              <div class="val-sub">Presi ${s.trans_matched_1s}/${g.n_transitions} · extra ${s.trans_spurious_1s}</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${s.sec_H_5m.toFixed(1)} s ${diffBadgeSec(s.diff_sec_H_5m, 5, 18)}</div>
+              <div class="val-sub">${(100 * s.sec_H_5m / g.total_s).toFixed(1)}%</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${s.sec_A_5m.toFixed(1)} s ${diffBadgeSec(s.diff_sec_A_5m, 5, 18)}</div>
+              <div class="val-sub">${(100 * s.sec_A_5m / g.total_s).toFixed(1)}%</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${s.sec_D_5m.toFixed(1)} s ${diffBadgeSec(s.diff_sec_D_5m, 5, 18)}</div>
+              <div class="val-sub">${(100 * s.sec_D_5m / g.total_s).toFixed(1)}%</div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      tbody.innerHTML = html;
+      tbody.querySelectorAll("tr[data-pick]").forEach(row => {
+        row.addEventListener("click", () => {
+          selectedModel = row.getAttribute("data-pick");
+          renderAll();
+        });
+      });
+    }
+
+    function renderTableFull() {
+      const tbody = document.querySelector("#tableFull tbody");
+      tbody.innerHTML = DATA.submissions.map(s => {
+        const fm = s.full_match;
+        const isSel = s.name === selectedModel;
+        return `
+          <tr class="${isSel ? 'selected-row' : ''}" data-pick="${s.name}" style="cursor:pointer">
+            <td>
+              <div class="val-main">#${s.rank} · ${s.name}${s.is_baseline ? '' : '<span class="tag-ours">NOSTRO</span>'}</div>
+            </td>
+            <td>
+              <div class="val-main">${fm.n_spells_full} azioni</div>
+              <div class="val-sub">1°T: ${fm.n_spells_h1} · 2°T: ${fm.n_spells_h2} (${fm.n_spells_H} H, ${fm.n_spells_A} A)</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${fm.mean_dur_full_s.toFixed(1)} s</div>
+              <div class="val-sub">mediana ${fm.median_dur_full_s.toFixed(1)} s</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${fm.n_trans_full}</div>
+              <div class="val-sub">${(fm.n_trans_full / (fm.total_graded_s / 60)).toFixed(1)} / min</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${fm.pct_H_graded.toFixed(1)}%</div>
+              <div class="val-sub">${(fm.sec_H / 60).toFixed(1)} min</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${fm.pct_A_graded.toFixed(1)}%</div>
+              <div class="val-sub">${(fm.sec_A / 60).toFixed(1)} min</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${fm.pct_D_graded.toFixed(1)}%</div>
+              <div class="val-sub">${(fm.sec_D / 60).toFixed(1)} min</div>
+            </td>
+            <td class="num">
+              <div class="val-main">${fm.home_share_full.toFixed(1)}% / ${(100 - fm.home_share_full).toFixed(1)}%</div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      tbody.querySelectorAll("tr[data-pick]").forEach(row => {
+        row.addEventListener("click", () => {
+          selectedModel = row.getAttribute("data-pick");
+          renderAll();
+        });
+      });
+    }
+
+    function renderAll() {
+      if (!DATA) return;
+      renderToggles();
+      drawTimeline();
+      renderTable5m();
+      renderTableFull();
+    }
+
+    function setupInteractions() {
+      const canvas = document.getElementById("timelineCanvas");
+      const tooltip = document.getElementById("tooltip");
+
+      let dragging = false;
+      let dragStartX = 0;
+      let dragStartView = [0, 0];
+
+      function clampView(ns, ne) {
+        const minSpan = 50;
+        let span = Math.max(minSpan, Math.min(DATA.n_frames, ne - ns));
+        if (ns < 0) { ns = 0; ne = span; }
+        if (ne > DATA.n_frames) { ne = DATA.n_frames; ns = ne - span; }
+        viewStart = ns;
+        viewEnd = ne;
+      }
+
+      function zoomBy(factor, anchorRatio = 0.5) {
+        const span = viewEnd - viewStart;
+        const anchorFrame = viewStart + anchorRatio * span;
+        const newSpan = span * factor;
+        clampView(anchorFrame - anchorRatio * newSpan, anchorFrame + (1 - anchorRatio) * newSpan);
+        drawTimeline();
+      }
+
+      canvas.addEventListener("wheel", e => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const plotW = Math.max(100, rect.width - LABEL_COL_W - RIGHT_PAD);
+        const relX = Math.max(0, Math.min(1, (e.clientX - rect.left - LABEL_COL_W) / plotW));
+        zoomBy(e.deltaY < 0 ? 0.75 : 1.33, relX);
+      }, { passive: false });
+
+      canvas.addEventListener("mousedown", e => {
+        dragging = true;
+        dragStartX = e.clientX;
+        dragStartView = [viewStart, viewEnd];
+      });
+
+      window.addEventListener("mouseup", () => { dragging = false; });
+
+      window.addEventListener("mousemove", e => {
+        if (!DATA) return;
+        const rect = canvas.getBoundingClientRect();
+        const plotW = Math.max(100, rect.width - LABEL_COL_W - RIGHT_PAD);
+
+        if (dragging) {
+          const dx = e.clientX - dragStartX;
+          const frameShift = -(dx / plotW) * (dragStartView[1] - dragStartView[0]);
+          clampView(dragStartView[0] + frameShift, dragStartView[1] + frameShift);
+          drawTimeline();
+        }
+
+        const insideX = e.clientX >= rect.left + LABEL_COL_W && e.clientX <= rect.right - RIGHT_PAD;
+        const insideY = e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (!insideX || !insideY) {
+          tooltip.style.display = "none";
+          return;
+        }
+
+        const ratio = (e.clientX - rect.left - LABEL_COL_W) / plotW;
+        const frame = Math.max(0, Math.min(DATA.n_frames - 1, Math.floor(viewStart + ratio * (viewEnd - viewStart))));
+        const gtCode = codeAtFrame(DATA.gt_rle, frame);
+
+        let html = `<div class="tt-title">${formatMatchClock(frame, DATA.fps)} · Frame ${frame}</div>`;
+        html += `<div class="tt-row"><span><b>Soluzione Vera:</b></span><span class="pill pill-${CODE_NAMES[gtCode]}">${CODE_LABELS_IT[gtCode]}</span></div>`;
+
+        DATA.submissions.filter(s => visibleModels.has(s.name)).forEach(s => {
+          const c = codeAtFrame(s.rle, frame);
+          let mark = "";
+          if (gtCode !== 3) {
+            mark = (c === gtCode)
+              ? ` <span style="color:#15803d;font-weight:700">✓</span>`
+              : ` <span style="color:#dc2626;font-weight:700">✗</span>`;
+          }
+          html += `<div class="tt-row"><span>${s.name}:</span><span><span class="pill pill-${CODE_NAMES[c]}">${CODE_NAMES[c]}</span>${mark}</span></div>`;
+        });
+
+        tooltip.innerHTML = html;
+        tooltip.style.display = "block";
+        const tx = Math.min(window.innerWidth - 265, e.clientX + 16);
+        const ty = Math.min(window.innerHeight - 220, e.clientY + 16);
+        tooltip.style.left = tx + "px";
+        tooltip.style.top = ty + "px";
+      });
+
+      document.getElementById("btnZoomIn").addEventListener("click", () => zoomBy(0.65));
+      document.getElementById("btnZoomOut").addEventListener("click", () => zoomBy(1.5));
+      document.getElementById("btnResetZoom").addEventListener("click", () => setPreset(currentPreset));
+      document.getElementById("btnPreset5m").addEventListener("click", () => setPreset("5m"));
+      document.getElementById("btnPresetH1").addEventListener("click", () => setPreset("h1"));
+      document.getElementById("btnPresetH2").addEventListener("click", () => setPreset("h2"));
+      document.getElementById("btnPresetAll").addEventListener("click", () => setPreset("all"));
+      window.addEventListener("resize", () => drawTimeline());
+    }
+
+    setupInteractions();
+    loadData();
+  </script>
+</body>
+</html>
