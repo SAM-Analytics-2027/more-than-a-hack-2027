@@ -27,3 +27,4 @@ One folder per ball-possession model, plus shared building blocks.
 | model | family | external LOO mean spellF1 |
 |---|---|---|
 | `possession_arm_v1` | XGBoost GBDT + provided Viterbi | 0.6298 |
+| `possession_arm_seg` | change-point segmentation + segment voting | 0.4755 |

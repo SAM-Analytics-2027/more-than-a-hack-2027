@@ -1,0 +1,15 @@
+{
+  "path": "C:\\Users\\bossa\\Desktop\\more-than-a-hack-2027\\evaluation\\results\\possession_arm_seg.csv",
+  "spell_f1_mean": 0.5294117647058825,
+  "macro_f1": 0.8315109304068833,
+  "acc": 0.8409333333333333,
+  "trans_f1_25": 0.3414634146341463,
+  "gt_spells": 17,
+  "pred_spells": 17,
+  "per_class": {
+    "H": 0.8837684118419133,
+    "A": 0.8034188034188035,
+    "D": 0.8073455759599332
+  },
+  "note": "sanity report on the PUBLIC slice only; no parameter was chosen here"
+}

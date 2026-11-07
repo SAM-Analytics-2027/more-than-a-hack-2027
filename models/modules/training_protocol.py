@@ -12,8 +12,10 @@ Every model runs the SAME list-one-match-out protocol:
 
 The caller supplies one adapter function:
       fit_predict(train_files, stop_files) -> (predict_fn, info)
-  where predict_fn(X: [n, d] float32) -> P: [n, 3] float32 posterior of (H, A, D),
-  and info is a small dict (best_iteration etc.) for the per-fold log.
+  where predict_fn(file_dict) -> P: [n, 3] float32 posterior of (H, A, D) for the
+  file's frames (the FULL dict is passed: GBDT families need X, temporal families
+  also need blocks/ctx for windowing), and info is a small dict (best_iteration
+  etc.) for the per-fold log.
 
 Files are the dicts produced by cache loading (see models/modules/cache.py):
   {match_id, dirty, X, labels, blocks, ctx, names, ...}.
@@ -27,6 +29,8 @@ from typing import Callable, Dict, List, Tuple
 import numpy as np
 
 from models.modules.cache import loo_posterior_path  # noqa: E402
+from models.modules.context import CONTEXT_KEYS  # noqa: E402
+from models.modules.data_external import EXTERNAL_IDS  # noqa: E402
 from models.modules.decoder_support import DecoderParams, decode_match  # noqa: E402
 from models.modules.scoring import score_file  # noqa: E402
 
@@ -35,9 +39,36 @@ FIT_BACKENDS: Dict[str, Callable] = {}   # registry for `--backend` style dispat
 
 def fold_of(file: Dict) -> int:
     """Fold index of a cache file dict (clean and dirtied share it)."""
-    from models.modules.data_external import EXTERNAL_IDS
-
     return EXTERNAL_IDS.index(file["match_id"])
+
+
+def balanced_class_weights(labels: np.ndarray) -> np.ndarray:
+    """Balanced per-class sample weights from THIS training set only (alpha scheme).
+
+    Copied from possession_arm_v1/train.py:class_weights so GBDT families weight
+    the same way and the nested comparison stays consistent.
+    """
+    codes = labels[labels >= 0]
+    n = len(codes)
+    counts = {c: max(1, int((codes == c).sum())) for c in (0, 1, 2)}
+    weights = np.empty(n, dtype=np.float32)
+    for c, cnt in counts.items():
+        mask = codes == c
+        weights[mask] = (n / (3.0 * cnt))
+    return weights
+
+
+def stack_labeled(train_files: List[Dict]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Concatenate training files into one fit matrix, dropping X (ungraded) rows.
+
+    Returns (X, y, w) where w is the balanced per-class weight array.
+    """
+    X = np.concatenate([f["X"] for f in train_files]).astype(np.float32)
+    y = np.concatenate([f["labels"] for f in train_files]).astype(np.int32)
+    keep = y >= 0                       # X (ungraded) rows never enter the fit
+    X, y = X[keep].astype(np.float32, copy=False), y[keep]
+    w = balanced_class_weights(y)
+    return X, y, w
 
 
 def run_one_fold(i: int, files: List[Dict], model_tag: str,
@@ -55,7 +86,7 @@ def run_one_fold(i: int, files: List[Dict], model_tag: str,
 
     rows, saved = [], []
     for f in hold_files:
-        P = np.asarray(predict_fn(f["X"]), dtype=np.float32)
+        P = np.asarray(predict_fn(f), dtype=np.float32)
         P = P.reshape(-1, 3)
         tags = (f["match_id"], bool(f["dirty"]))
         meta_ctx = f["ctx"]

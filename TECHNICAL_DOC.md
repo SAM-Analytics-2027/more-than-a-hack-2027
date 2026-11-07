@@ -173,3 +173,29 @@ contains the models, the decoder parameters with provenance, and the search hist
 Total wall time for the full chain: under two hours on one RTX 5070 Ti (the Stage-2
 search dominates; the provided Viterbi runs ≈ 277 k frames/s, so it is never the
 bottleneck).
+
+## 8. Family sweep on branch AM (identical protocol)
+
+From the 2027 refactor on, every model family lives in `models/<name>/` with its own
+artifacts and both a `QUICK_NAME.md` and a README; the building blocks they all share
+are in `models/modules/`. The comparison protocol is IDENTICAL for every family:
+
+- same v2 feature base (`models/modules/features_base.py`, feature-set tag `v2`);
+- same nested leave-one-match-out outer folds over the 10 external matches, clean GT
+  in both copies, early stopping on the NEXT fold (`models/modules/training_protocol.py`);
+- same Viterbi decoder core and same external-only coordinate search over the shared
+  `PARAM_GRID` (`models/modules/decoder_search.py`), on each family's own posteriors;
+- the repository metric (`evaluation/possession_metrics.py`, primary taus 12/25);
+  every completed family writes `evaluation/results/<name>.csv` for the dashboard.
+
+Selection rule (compliance): the family to submit is the best **external LOO mean
+spellF1**; the public 5-minute GT is reported only as a sanity number, never as a
+tuning or selection signal.
+
+Completed families so far:
+
+| model | Stage-1 family | external LOO mean spellF1 |
+|---|---|---|
+| `possession_arm_v1` | XGBoost GBDT (depth-wise hist) | 0.6298 |
+| `possession_arm_seg` | bottom-up change-point segmentation + segment voting | 0.4755 |
+

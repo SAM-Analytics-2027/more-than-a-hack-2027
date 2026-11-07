@@ -16,7 +16,7 @@ import json
 import os
 import sys
 import time
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 
@@ -110,6 +110,42 @@ def parse_posterior_name(name: str, model_tag: str | None = None) -> tuple:
 
 def is_cached(match_id: str, dirty: bool) -> bool:
     return os.path.isfile(cache_path(match_id, dirty))
+
+
+def load_cached_file(match_id: str, dirty: bool) -> Dict:
+    """One npz cache file -> the standard file dict every model trains on.
+
+    Mirrors possession_arm_v1/train.py:_load_file exactly (same keys), but reads
+    from the SHARED cache so new families do not import v1 code.
+    """
+    path = cache_path(match_id, dirty)
+    with np.load(path, allow_pickle=False) as z:
+        names = list(json.loads(str(z["names"])))
+        return {
+            "match_id": match_id,
+            "dirty": bool(dirty),
+            "X": z["X"],
+            "labels": z["labels"],
+            "names": names,
+            "blocks": z["blocks"],
+            "ctx": {k: z[f"ctx_{k}"].astype(bool) for k in CONTEXT_KEYS},
+        }
+
+
+def load_all_files(clean_and_dirty: bool = True) -> List[Dict]:
+    """Every cached external file (clean labels in both cases); raises if the
+    feature names are inconsistent across files (stale partial cache)."""
+    files = []
+    for mid in EXTERNAL_IDS:
+        if is_cached(mid, False):
+            files.append(load_cached_file(mid, False))
+        if clean_and_dirty and is_cached(mid, True):
+            files.append(load_cached_file(mid, True))
+    if not files:
+        raise FileNotFoundError("no cache files: run python models/modules/cache.py first")
+    if len({tuple(f["names"]) for f in files}) != 1:
+        raise RuntimeError("feature names differ between cache files: rebuild the cache")
+    return files
 
 
 def build_one(match_id: str, dirty: bool) -> str:
