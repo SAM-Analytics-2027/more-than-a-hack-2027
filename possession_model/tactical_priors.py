@@ -371,36 +371,44 @@ def compute_tactical_tag_priors(
         if t_restart is None:
             t_restart = min(ef - 1, max(t_still + int(2.0 * fps), sf + int(5.0 * fps)))
 
-        # Walk t_stop backwards across the entire pre-restart stoppage (up to 35 s before sf)
-        back_limit = max(prev_restart_frame + int(2.5 * fps), sf - int(35 * fps))
+        # Walk t_stop backwards across pre-restart stoppage (up to 25s before sf)
+        back_limit = max(prev_restart_frame + int(2.5 * fps), sf - int(25 * fps))
         t_stop = min(t_still, t_restart - 1)
-        while t_stop > back_limit:
-            prev = t_stop - 1
-            is_slow_or_out = (
-                oob[prev]
-                or (exit_sig[prev] > 0.5)
-                or (walk_ratio_sm[prev] > 0.50)
-                or (not obs_mask[prev] and (rms_spd_sm[prev] < 2.35 or walk_ratio_sm[prev] > 0.44))
-                or (np.isfinite(kin_speed[prev]) and kin_speed[prev] < 1.9 and walk_ratio_sm[prev] > 0.44)
-            )
-            if is_slow_or_out:
-                t_stop = prev
-            else:
-                break
 
-        # Snap t_stop to exact boundary-exit frame when the ball crossed out-of-bounds nearby
-        snap_lo = max(back_limit, t_stop - int(3.5 * fps))
-        snap_hi = min(t_restart - int(2.5 * fps), t_stop + int(4.0 * fps))
-        if snap_hi > snap_lo:
-            imp_hits = np.flatnonzero(exit_imp[snap_lo:snap_hi])
-            if len(imp_hits) > 0:
-                t_stop = snap_lo + int(imp_hits[0])
+        # Check for direct out-of-bounds boundary crossing prior to restart
+        pre_exit_hits = np.flatnonzero(exit_imp[back_limit:t_restart])
+        if len(pre_exit_hits) > 0:
+            t_stop = back_limit + int(pre_exit_hits[-1])
+        else:
+            while t_stop > back_limit:
+                prev = t_stop - 1
+                # Never walk back across a ball that is actively rolling in-bounds
+                if np.isfinite(kin_speed[prev]) and kin_speed[prev] > 1.8 and obs_mask[prev] and not oob[prev]:
+                    break
+                is_slow_or_out = (
+                    oob[prev]
+                    or (exit_sig[prev] > 0.5)
+                    or (sub_oob[:still_end].any() and walk_ratio_sm[prev] > 0.60)
+                    or (np.isfinite(kin_speed[prev]) and kin_speed[prev] < 1.0 and walk_ratio_sm[prev] > 0.55)
+                )
+                if is_slow_or_out:
+                    t_stop = prev
+                else:
+                    break
+
+            # Snap t_stop to exact boundary-exit frame when the ball crossed out-of-bounds nearby
+            snap_lo = max(back_limit, t_stop - int(4.0 * fps))
+            snap_hi = min(t_restart - int(2.5 * fps), t_stop + int(4.0 * fps))
+            if snap_hi > snap_lo:
+                imp_hits = np.flatnonzero(exit_imp[snap_lo:snap_hi])
+                if len(imp_hits) > 0:
+                    t_stop = snap_lo + int(imp_hits[0])
 
         if t_restart - t_stop < int(3.0 * fps):
             t_stop = max(back_limit, min(sf, t_restart - int(4.0 * fps)))
 
         stoppage_prior[t_stop:t_restart] = np.maximum(
-            stoppage_prior[t_stop:t_restart], 3.5
+            stoppage_prior[t_stop:t_restart], 4.5
         )
         active_phase_score[t_stop:t_restart] = 0.0
         stop_impulse[t_stop] = True
@@ -417,6 +425,10 @@ def compute_tactical_tag_priors(
             team_prior_h[t_restart:post_win] = np.clip(
                 team_prior_h[t_restart:post_win] + sign * 1.25, -2.4, 2.4
             )
+
+    # Active rolling ball in-bounds zeroes weak stoppage priors, but preserves verified set-piece blocks (>= 3.5)
+    active_ball = (kin_speed > 1.8) & obs_mask & (~oob) & (stoppage_prior < 3.5)
+    stoppage_prior[active_ball] = 0.0
 
     return {
         "team_prior_h": team_prior_h,

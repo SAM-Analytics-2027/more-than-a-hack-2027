@@ -123,6 +123,8 @@ def compute_frame_and_transition_costs(
         - 0.50 * tactical["active_phase_score"]
         - 0.45
     ).astype(np.float64)
+    in_confirmed_stoppage = tactical["stoppage_prior"] > 2.0
+    z_dead = np.where(in_confirmed_stoppage, np.maximum(z_dead, 4.0), z_dead)
     z_dead = np.clip(z_dead, -8.0, 8.0)
 
     # --- 2. Team Possession Logit delta_team (delta_team > 0 => Home favored over Away) ---
@@ -142,7 +144,6 @@ def compute_frame_and_transition_costs(
         + 0.42 * np.clip(team_dynamics["width_diff_h"], -1.3, 1.3)
         + 0.35 * np.clip(team_dynamics["attacking_drift_h"] / 2.2, -1.1, 1.1)
         + 0.18 * np.clip(team_dynamics["territory_h"], -1.1, 1.1)
-        + tag_weight * tactical["team_prior_h"]
     )
 
     delta_team = np.clip((ball_control_diff_h + team_context_diff_h).astype(np.float64), -8.0, 8.0)
@@ -161,10 +162,20 @@ def compute_frame_and_transition_costs(
     ctrl = ball_control["verified_control_mask"]
     ctrl_dilated = np.convolve(ctrl.astype(np.int32), np.ones(7, dtype=np.int32), mode="same") > 0
 
+    impact_h = ball_control.get("impact_h", np.zeros(n_frames, dtype=bool))
+    impact_a = ball_control.get("impact_a", np.zeros(n_frames, dtype=bool))
+    impact_dilated = (
+        np.convolve((impact_h | impact_a).astype(np.int32), np.ones(5, dtype=np.int32), mode="same") > 0
+    )
+
     turnover_cost = np.where(
-        ctrl_dilated,
-        13.5,
-        np.where(in_occlusion, 54.0, 42.0),
+        impact_dilated,
+        4.5,
+        np.where(
+            ctrl_dilated,
+            13.5,
+            np.where(in_occlusion, 54.0, 42.0),
+        ),
     ).astype(np.float64)
 
     stop_imp_dil = (
@@ -282,7 +293,7 @@ def run_possession_inference(
             turnover_cost[s_f : e_f + 1],
             stoppage_entry_cost[s_f : e_f + 1],
             restart_cost[s_f : e_f + 1],
-            min_possession_frames=45,  # 1.80 s minimum controlled possession duration
+            min_possession_frames=45,  # 1.80 s physical threshold (filters out micro-contact noise and duels)
             min_stoppage_frames=85,    # 3.40 s minimum dead-ball stoppage duration
             initial_cost_offset=init_offset,
         )
