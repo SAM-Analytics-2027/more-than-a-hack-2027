@@ -62,3 +62,9 @@ __pycache__/
 venv/
 env/
 .DS_Store
+
+# -- heavy reproducible model artifacts ----------------------------------------------------------
+# The leave-one-fold XGBoost models are rebuilt by possession_arm/eval_external.py (~150 MB);
+# only the submitted final artifact and the decision artifacts ship.
+artifacts/possession_arm_v1/loo/
+*.npz
