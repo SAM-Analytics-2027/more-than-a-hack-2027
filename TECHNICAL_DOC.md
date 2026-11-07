@@ -198,4 +198,5 @@ Completed families so far:
 |---|---|---|
 | `possession_arm_v1` | XGBoost GBDT (depth-wise hist) | 0.6298 |
 | `possession_arm_seg` | bottom-up change-point segmentation + segment voting | 0.4755 |
+| `possession_arm_crf` | duration-state CRF: emission MLP (218→64→3) + expanded (class, duration-regime) chain, forward-backward per half block | 0.6448 |
 
