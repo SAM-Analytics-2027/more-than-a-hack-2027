@@ -70,3 +70,7 @@ env/
 models/*/artifacts/loo/
 artifacts/possession_arm_v1/loo/
 *.npz
+
+# -- transient pip working dirs (the slow wheels install creates them in the repo root) ---------
+pip-metadata-*/
+pip-unpack-*/
