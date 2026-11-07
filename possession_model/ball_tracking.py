@@ -198,6 +198,85 @@ def reconstruct_ball_trajectory(
     }
 
 
+def detect_ball_impact_events(
+    player_xy: np.ndarray,
+    slot_teams: np.ndarray,
+    ball_data: Dict[str, np.ndarray],
+    fps: float = 25.0,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Detect sudden kinematic kicks and impact events from ball acceleration and directional shifts,
+    attributed to the nearest player within physical reaching distance (< 2.2 m).
+    Returns:
+        impact_h : (N,) bool
+        impact_a : (N,) bool
+        impact_strength : (N,) float32
+    """
+    kin_xy = ball_data["kin_xy"]
+    n_frames = len(kin_xy)
+
+    v3 = np.full_like(kin_xy, np.nan)
+    v3[2:-2] = (kin_xy[4:] - kin_xy[:-4]) * (fps / 4.0)
+    sp3 = np.hypot(v3[:, 0], v3[:, 1])
+
+    v_fwd = v3[3:]
+    v_back = v3[:-3]
+    ok_dv = np.isfinite(v_fwd[:, 0]) & np.isfinite(v_back[:, 0])
+    dv_sub = np.hypot(v_fwd[:, 0] - v_back[:, 0], v_fwd[:, 1] - v_back[:, 1])
+    dv_vec = np.zeros(n_frames, dtype=np.float32)
+    dv_vec[3:] = np.where(ok_dv, dv_sub, 0.0)
+
+    sp_fwd = sp3[3:]
+    sp_back = sp3[:-3]
+    ok_a = np.isfinite(sp_fwd) & np.isfinite(sp_back)
+    a_sub = (sp_fwd - sp_back) * (fps / 3.0)
+    a_mag = np.zeros(n_frames, dtype=np.float32)
+    a_mag[3:] = np.where(ok_a, a_sub, 0.0)
+
+    h_slots = slot_teams == HOME
+    a_slots = slot_teams == AWAY
+
+    vis_ball = np.isfinite(kin_xy[:, 0])
+    idx_vis = np.flatnonzero(vis_ball)
+
+    dist_h = np.full(n_frames, 999.0, dtype=np.float32)
+    dist_a = np.full(n_frames, 999.0, dtype=np.float32)
+
+    chunk = 10000
+    for start in range(0, len(idx_vis), chunk):
+        sub = idx_vis[start : start + chunk]
+        bx = kin_xy[sub]
+        ph = player_xy[sub][:, h_slots]
+        pa = player_xy[sub][:, a_slots]
+
+        dh = np.hypot(ph[:, :, 0] - bx[:, None, 0], ph[:, :, 1] - bx[:, None, 1])
+        da = np.hypot(pa[:, :, 0] - bx[:, None, 0], pa[:, :, 1] - bx[:, None, 1])
+
+        dist_h[sub] = np.nanmin(np.where(np.isfinite(dh), dh, 999.0), axis=1)
+        dist_a[sub] = np.nanmin(np.where(np.isfinite(da), da, 999.0), axis=1)
+
+    is_active_impulse = (a_mag > 5.0) | (dv_vec > 3.5)
+
+    impact_h = (
+        vis_ball
+        & (dist_h < 2.2)
+        & (dist_h < dist_a - 0.2)
+        & (is_active_impulse | (dist_h < 0.8))
+    )
+    impact_a = (
+        vis_ball
+        & (dist_a < 2.2)
+        & (dist_a < dist_h - 0.2)
+        & (is_active_impulse | (dist_a < 0.8))
+    )
+
+    impact_strength = np.maximum(
+        np.clip(dv_vec / 5.0, 0.0, 2.0),
+        np.clip(a_mag / 8.0, 0.0, 2.0),
+    ).astype(np.float32)
+
+    return impact_h, impact_a, impact_strength
+
+
 def detect_ball_control_and_passes(
     player_xy: np.ndarray,
     player_vel: np.ndarray,
@@ -215,9 +294,14 @@ def detect_ball_control_and_passes(
     kin_vel = ball_data["kin_vel"]
     oob = ball_data["out_of_bounds"]
     exit_sig = ball_data["boundary_exit_signal"]
+    kin_speed = ball_data["kin_speed"]
 
     h_slots = slot_teams == HOME
     a_slots = slot_teams == AWAY
+
+    impact_h, impact_a, impact_strength = detect_ball_impact_events(
+        player_xy, slot_teams, ball_data, fps=fps
+    )
 
     min_dist_h = np.full(n_frames, np.nan, dtype=np.float32)
     min_dist_a = np.full(n_frames, np.nan, dtype=np.float32)
@@ -347,46 +431,59 @@ def detect_ball_control_and_passes(
         s_i, e_i, _, str_i, mvr_i = ep_item
         return (e_i - s_i) >= 28 and str_i >= 11.0 and mvr_i < 6.5
 
+    def _is_clearance(ep_item) -> bool:
+        s_i, e_i, tm_i, str_i, _ = ep_item
+        bsp_sub = kin_speed[s_i : min(n_frames, e_i + 15)]
+        has_kick = (bsp_sub > 15.0).any() if len(bsp_sub) > 0 else False
+        opp_dist = min_dist_h[s_i:e_i] if tm_i == AWAY else min_dist_a[s_i:e_i]
+        is_uncontested = (np.nanmean(opp_dist) > 2.5) if (len(opp_dist) > 0 and np.isfinite(opp_dist).any()) else False
+        return has_kick and is_uncontested
+
     is_uncontrolled = np.zeros(len(touch_episodes), dtype=bool)
     for _ in range(2):
         active_indices = [i for i in range(len(touch_episodes)) if not is_uncontrolled[i]]
+        if not active_indices:
+            break
+        # Group active episodes into runs of identical team
+        runs = []
+        i = 0
+        while i < len(active_indices):
+            tm = touch_episodes[active_indices[i]][2]
+            j = i + 1
+            while j < len(active_indices) and touch_episodes[active_indices[j]][2] == tm:
+                j += 1
+            runs.append((tm, i, j))
+            i = j
+
+        # Check runs sandwiched between the same possessing team (T -> Opp ... Opp -> T)
+        # Rule (CHALLENGE.md): Deflections, tackles, and duels without sustained team control
+        # do not change possession.
+        for r_idx in range(1, len(runs) - 1):
+            prev_tm, p_s, p_e = runs[r_idx - 1]
+            curr_tm, c_s, c_e = runs[r_idx]
+            next_tm, n_s, n_e = runs[r_idx + 1]
+
+            if prev_tm == next_tm and prev_tm != curr_tm:
+                t_prev_team = touch_episodes[active_indices[p_e - 1]][1]
+                t_next_team = touch_episodes[active_indices[n_s]][0]
+                gap_span = t_next_team - t_prev_team
+                if gap_span <= 210 and not _has_stoppage_between(t_prev_team, t_next_team):
+                    has_carry = any(_is_sustained_carry(touch_episodes[active_indices[k]]) for k in range(c_s, c_e))
+                    has_clearance = any(_is_clearance(touch_episodes[active_indices[k]]) for k in range(c_s, c_e))
+                    total_opp_frames = sum(
+                        touch_episodes[active_indices[k]][1] - touch_episodes[active_indices[k]][0]
+                        for k in range(c_s, c_e)
+                    )
+                    total_opp_strength = sum(
+                        touch_episodes[active_indices[k]][3] for k in range(c_s, c_e)
+                    )
+                    if not has_carry and not has_clearance and (total_opp_frames < 32 or total_opp_strength < 15.0):
+                        for k in range(c_s, c_e):
+                            is_uncontrolled[active_indices[k]] = True
+
         for pos, k in enumerate(active_indices):
             s_curr, e_curr, tm_curr, str_curr, mvr_curr = touch_episodes[k]
-            if _is_sustained_carry(touch_episodes[k]):
-                continue
-
-            has_prev = pos > 0
-            has_next = pos + 1 < len(active_indices)
-            prev_ep = touch_episodes[active_indices[pos - 1]] if has_prev else None
-            next_ep = touch_episodes[active_indices[pos + 1]] if has_next else None
-
-            same_prev = (
-                prev_ep is not None
-                and prev_ep[2] == tm_curr
-                and (s_curr - prev_ep[1]) <= 185
-                and not _has_stoppage_between(prev_ep[1], s_curr)
-            )
-            same_next = (
-                next_ep is not None
-                and next_ep[2] == tm_curr
-                and (next_ep[0] - e_curr) <= 185
-                and not _has_stoppage_between(e_curr, next_ep[0])
-            )
-            if same_prev or same_next:
-                continue
-
-            # Isolated single opponent touch sandwiched between possessing team touches (T -> Opp -> T)
-            if (
-                prev_ep is not None
-                and next_ep is not None
-                and prev_ep[2] == next_ep[2]
-                and prev_ep[2] != tm_curr
-                and (next_ep[0] - prev_ep[1]) <= 190
-                and not _has_stoppage_between(prev_ep[1], next_ep[0])
-            ):
-                is_uncontrolled[k] = True
-                continue
-
+            prev_ep = touch_episodes[active_indices[pos - 1]] if pos > 0 else None
             # Shot/cross block or goalkeeper parry deflected directly out of play
             if (
                 prev_ep is not None
@@ -399,37 +496,54 @@ def detect_ball_control_and_passes(
 
     control_score_h = raw_touch_h.copy()
     control_score_a = raw_touch_a.copy()
+    uncontrolled_mask = np.zeros(n_frames, dtype=bool)
     for k, (s_c, e_c, tm_c, _, _) in enumerate(touch_episodes):
         if is_uncontrolled[k]:
+            uncontrolled_mask[s_c:e_c] = True
             if tm_c == HOME:
                 control_score_h[s_c:e_c] *= 0.05
             else:
                 control_score_a[s_c:e_c] *= 0.05
+
+    # Boost control score at kinematic impact/kick frames ONLY if not an uncontrolled deflection
+    control_score_h += 2.0 * (impact_h & (~uncontrolled_mask)).astype(np.float32)
+    control_score_a += 2.0 * (impact_a & (~uncontrolled_mask)).astype(np.float32)
 
     valid_episodes = [ep for k, ep in enumerate(touch_episodes) if not is_uncontrolled[k]]
     pass_bridge_h = np.zeros(n_frames, dtype=np.float32)
     pass_bridge_a = np.zeros(n_frames, dtype=np.float32)
     verified_control_mask = np.zeros(n_frames, dtype=bool)
 
+    def _is_substantial(ep) -> bool:
+        s_i, e_i, _, str_i, _ = ep
+        bsp_sub = kin_speed[s_i : min(n_frames, e_i + 8)]
+        has_kick = (bsp_sub > 12.0).any() if len(bsp_sub) > 0 else False
+        return _is_sustained_carry(ep) or ((e_i - s_i) >= 12 and str_i >= 4.5) or (has_kick and (e_i - s_i) >= 5)
+
     for idx_v, ep_v in enumerate(valid_episodes):
         s_c, e_c, tm_c, str_c, _ = ep_v
+        is_sub_curr = _is_substantial(ep_v)
+        has_sub_prev = idx_v > 0 and _is_substantial(valid_episodes[idx_v - 1])
+        has_sub_next = idx_v + 1 < len(valid_episodes) and _is_substantial(valid_episodes[idx_v + 1])
+
         linked_prev = (
             idx_v > 0
             and valid_episodes[idx_v - 1][2] == tm_c
             and (s_c - valid_episodes[idx_v - 1][1]) <= 185
             and not _has_stoppage_between(valid_episodes[idx_v - 1][1], s_c)
+            and (is_sub_curr or has_sub_prev)
         )
         linked_next = (
             idx_v + 1 < len(valid_episodes)
             and valid_episodes[idx_v + 1][2] == tm_c
             and (valid_episodes[idx_v + 1][0] - e_c) <= 185
             and not _has_stoppage_between(e_c, valid_episodes[idx_v + 1][0])
+            and (is_sub_curr or has_sub_next)
         )
         is_verified = (
-            _is_sustained_carry(ep_v)
+            is_sub_curr
             or linked_prev
             or linked_next
-            or ((e_c - s_c) >= 14 and str_c >= 5.5)
         )
         if is_verified:
             verified_control_mask[s_c:e_c] = True
@@ -444,18 +558,28 @@ def detect_ball_control_and_passes(
             s_n, e_n, tm_n, str_n, _ = valid_episodes[idx_v + 1]
             gap_len = s_n - e_c
             if 0 < gap_len <= 190 and not _has_stoppage_between(e_c, s_n):
+                sub_spd = kin_speed[e_c:s_n]
+                sub_dh = min_dist_h[e_c:s_n]
+                sub_da = min_dist_a[e_c:s_n]
+                min_both = np.minimum(sub_dh, sub_da)
+                loose = (sub_spd < 2.0) & (min_both > 2.5)
+                loose_hits = np.flatnonzero(loose)
+                bridge_end = s_n
+                if len(loose_hits) > 0 and loose_hits[0] > 10:
+                    bridge_end = e_c + int(loose_hits[0])
+
                 if tm_c == tm_n:
                     decay = max(0.55, 1.35 - gap_len / 220.0)
                     if tm_c == HOME:
-                        pass_bridge_h[e_c:s_n] = np.maximum(pass_bridge_h[e_c:s_n], decay)
+                        pass_bridge_h[e_c:bridge_end] = np.maximum(pass_bridge_h[e_c:bridge_end], decay)
                     else:
-                        pass_bridge_a[e_c:s_n] = np.maximum(pass_bridge_a[e_c:s_n], decay)
+                        pass_bridge_a[e_c:bridge_end] = np.maximum(pass_bridge_a[e_c:bridge_end], decay)
                 elif gap_len <= 140 and is_verified:
                     decay = max(0.30, 0.78 - gap_len / 210.0)
                     if tm_c == HOME:
-                        pass_bridge_h[e_c:s_n] = np.maximum(pass_bridge_h[e_c:s_n], decay)
+                        pass_bridge_h[e_c:bridge_end] = np.maximum(pass_bridge_h[e_c:bridge_end], decay)
                     else:
-                        pass_bridge_a[e_c:s_n] = np.maximum(pass_bridge_a[e_c:s_n], decay)
+                        pass_bridge_a[e_c:bridge_end] = np.maximum(pass_bridge_a[e_c:bridge_end], decay)
 
     # Live-play occlusion continuity across unseen in-bounds ball flights (3.0 s .. 10.4 s)
     # when the possessing team before and after the occlusion matches and players stay at live match tempo.
@@ -502,6 +626,8 @@ def detect_ball_control_and_passes(
         np.isfinite(min_dist_a), np.exp(-0.5 * (min_dist_a / 2.8) ** 2), 0.0
     ).astype(np.float32)
 
+    verified_control_mask |= ((impact_h | impact_a) & (~uncontrolled_mask))
+
     return {
         "min_dist_h": min_dist_h,
         "min_dist_a": min_dist_a,
@@ -517,4 +643,7 @@ def detect_ball_control_and_passes(
         "proximity_score_h": proximity_score_h,
         "proximity_score_a": proximity_score_a,
         "verified_control_mask": verified_control_mask,
+        "impact_h": impact_h & (~uncontrolled_mask),
+        "impact_a": impact_a & (~uncontrolled_mask),
+        "impact_strength": impact_strength,
     }
