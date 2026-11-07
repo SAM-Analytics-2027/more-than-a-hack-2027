@@ -11,6 +11,8 @@ For every fold i (one logical match = its clean AND dirtied file):
 
     python possession_arm/eval_external.py            # all folds (long: GPU fits)
     python possession_arm/eval_external.py --folds 0 1
+
+    New location: python models/possession_arm_v1/eval_external.py --folds 0 1
 """
 
 import argparse
@@ -28,22 +30,20 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from evaluation import possession_metrics as pm  # noqa: E402
-from possession_arm.cache import CACHE_DIR, cache_path  # noqa: E402
-from possession_arm.data_external import EXTERNAL_IDS  # noqa: E402
-from possession_arm.decode import DEFAULT_PARAMS, DecoderParams, decode_match  # noqa: E402
-from possession_arm.train import (  # noqa: E402
+from models.modules.cache import CACHE_DIR, loo_posterior_path  # noqa: E402
+from models.modules.data_external import EXTERNAL_IDS  # noqa: E402
+from models.modules.decoder_support import (  # noqa: E402
+    DEFAULT_PARAMS,
+    DecoderParams,
+    decode_match,
+)
+from models.possession_arm_v1.train import (  # noqa: E402
     ARTIFACT_DIR,
     fit_fold,
     fold_of,
     load_all,
     save_model,
 )
-
-
-def loo_posterior_path(match_id: str, dirty: bool) -> str:
-    base = os.path.basename(cache_path(match_id, dirty))
-    stem = base[len(FEATURE_SET_TAG) + 1:]
-    return os.path.join(CACHE_DIR, f"looP_{FEATURE_SET_TAG}_{stem}")
 
 
 def to_eval_codes(codes: np.ndarray) -> np.ndarray:

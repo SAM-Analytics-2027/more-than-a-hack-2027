@@ -12,13 +12,13 @@ from typing import Dict
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/modules/ -> models/ -> repo root
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from games import GAMES, GAME  # noqa: E402
 from possession_model.data_loader import load_atd_arrays  # noqa: E402
-from possession_arm.features import target_blocks  # noqa: E402
+from models.modules.features_base import target_blocks  # noqa: E402
 
 
 def load_target_match(game: str = GAME, use_broadcast: bool = False) -> Dict:

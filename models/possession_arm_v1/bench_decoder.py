@@ -1,6 +1,8 @@
 """Benchmark the provided duration-constrained Viterbi on realistic CPU arrays.
 
    python possession_arm/bench_decoder.py [frames] [min_pos] [min_stop]
+
+   New location: python models/possession_arm_v1/bench_decoder.py [frames] [min_pos] [min_stop]
 """
 
 import os
@@ -10,7 +12,7 @@ import time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/possession_arm_v1/ -> models/ -> repo
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

@@ -10,6 +10,8 @@ parameters or the model (RULES.md compliance).
 
     python possession_arm/predict.py                 # write + sanity check
     python possession_arm/predict.py --out PATH     # custom CSV path
+
+    New location: python models/possession_arm_v1/predict.py --out PATH
 """
 
 import argparse
@@ -22,19 +24,19 @@ from typing import Dict, Optional
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/possession_arm_v1/ -> models/ -> repo
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from games import GAME, GAMES  # noqa: E402
 from possession_model.run import write_submission  # noqa: E402
-from possession_arm.context import build_context  # noqa: E402
-from possession_arm.context import context_badge  # noqa: E402
-from possession_arm.decode import params_from_dict, decode_match  # noqa: E402
-from possession_arm.features import build_feature_matrix  # noqa: E402
-from possession_arm.target_match import load_target_match  # noqa: E402
+from models.modules.context import build_context  # noqa: E402
+from models.modules.context import context_badge  # noqa: E402
+from models.modules.decoder_support import params_from_dict, decode_match  # noqa: E402
+from models.modules.features_base import build_feature_matrix  # noqa: E402
+from models.modules.target_match import load_target_match  # noqa: E402
 
-ARTIFACT_DIR = os.path.join(ROOT, "artifacts", "possession_arm_v1")
+ARTIFACT_DIR = os.path.join(HERE, "artifacts")
 MODEL_PATH = os.path.join(ARTIFACT_DIR, "xgb_final.json")
 PARAMS_PATH = os.path.join(ARTIFACT_DIR, "decoder_params.json")
 SANITY_PATH = os.path.join(ARTIFACT_DIR, "target_sanity.json")

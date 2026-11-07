@@ -22,14 +22,18 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/possession_arm_v1/ -> models/ -> repo
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from evaluation import possession_metrics as pm  # noqa: E402
-from possession_arm.cache import CACHE_DIR, cache_path, parse_cache_name  # noqa: E402
-from possession_arm.features import FEATURE_SET_TAG  # noqa: E402
-from possession_arm.decode import (  # noqa: E402
+from models.modules.cache import (  # noqa: E402
+    CACHE_DIR,
+    cache_path,
+    loo_posterior_names,
+    parse_posterior_name,
+)
+from models.modules.decoder_support import (  # noqa: E402
     DEFAULT_PARAMS,
     PARAM_GRID,
     DecoderParams,
@@ -37,6 +41,7 @@ from possession_arm.decode import (  # noqa: E402
     params_from_dict,
     params_to_dict,
 )
+from models.possession_arm_v1.train import ARTIFACT_DIR  # noqa: E402
 
 
 def loo_sample_names() -> List[str]:
@@ -45,12 +50,10 @@ def loo_sample_names() -> List[str]:
     Posteriors do not share the cache_names() vocabulary: they are model artifacts
     appended under the same directory, so the directory is listed directly.
     """
-    prefix = "looP_" + FEATURE_SET_TAG + "_"
-    return [f for f in sorted(os.listdir(CACHE_DIR))
-            if f.startswith(prefix) and f.endswith(".npz")]
+    return loo_posterior_names()      # model_tag=None -> the legacy untagged v1 files
 
-SEARCH_LOG = os.path.join(ROOT, "artifacts", "possession_arm_v1", "decoder_search_log.json")
-BEST_PATH = os.path.join(ROOT, "artifacts", "possession_arm_v1", "decoder_params.json")
+SEARCH_LOG = os.path.join(ARTIFACT_DIR, "decoder_search_log.json")
+BEST_PATH = os.path.join(ARTIFACT_DIR, "decoder_params.json")
 
 # Coordinate order: shortest path to the dense spellF1 levers first.
 SEARCH_ORDER = (
@@ -72,7 +75,7 @@ class Holdouts:
         self.ctx: Dict[Tuple[str, bool], Dict[str, np.ndarray]] = {}
         self.gt_codes: Dict[Tuple[str, bool], np.ndarray] = {}
         for name in loo_sample_names():
-            match_id, dirty = parse_cache_name(name[len("looP_") :])
+            match_id, dirty = parse_posterior_name(name)
             tags = (match_id, dirty)
             with np.load(os.path.join(CACHE_DIR, name), allow_pickle=False) as z:
                 self.P[tags] = z["P"]

@@ -64,7 +64,9 @@ env/
 .DS_Store
 
 # -- heavy reproducible model artifacts ----------------------------------------------------------
-# The leave-one-fold XGBoost models are rebuilt by possession_arm/eval_external.py (~150 MB);
-# only the submitted final artifact and the decision artifacts ship.
+# Per-model artifacts live in models/<name>/artifacts/ . The leave-one-fold stage-1 models are
+# rebuilt by each model's eval script (>= 100 MB); only the final artifact and the decision
+# artifacts (decoder parameters, provenance) ship.
+models/*/artifacts/loo/
 artifacts/possession_arm_v1/loo/
 *.npz

@@ -5,6 +5,8 @@ outside the external training distribution? No ground truth involved: this is a
 tracking-only distribution-coverage report used to fix train/serve feature skew.
 
     python possession_arm/diagnose_shift.py
+
+    New location: python models/possession_arm_v1/diagnose_shift.py
 """
 
 import os
@@ -15,13 +17,13 @@ import numpy as np
 import json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/possession_arm_v1/ -> models/ -> repo
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from possession_arm.cache import CACHE_DIR, cache_names  # noqa: E402
-from possession_arm.features import build_feature_matrix  # noqa: E402
-from possession_arm.target_match import load_target_match  # noqa: E402
+from models.modules.cache import CACHE_DIR, cache_names  # noqa: E402
+from models.modules.features_base import build_feature_matrix  # noqa: E402
+from models.modules.target_match import load_target_match  # noqa: E402
 
 
 def pooled_external(names: List[str], dirty_only: bool = True) -> Dict[str, np.ndarray]:

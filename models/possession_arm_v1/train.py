@@ -9,6 +9,9 @@ Split discipline (rules compliance):
     python possession_arm/train.py --mode final      train on all 10 external matches
     python possession_arm/train.py --mode loo --fold 3   one leave-one-match-out fold
     python possession_arm/train.py --help
+
+    Now lives in models/possession_arm_v1/ (same commands with the new path):
+    python models/possession_arm_v1/train.py --mode final
 """
 
 import argparse
@@ -21,15 +24,15 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/possession_arm_v1/ -> models/ -> repo
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from possession_arm.cache import CACHE_DIR, cache_path, is_cached  # noqa: E402
-from possession_arm.context import CONTEXT_KEYS  # noqa: E402
-from possession_arm.data_external import EXTERNAL_IDS, LABEL_TO_CODE  # noqa: E402
+from models.modules.cache import CACHE_DIR, cache_path, is_cached  # noqa: E402
+from models.modules.context import CONTEXT_KEYS  # noqa: E402
+from models.modules.data_external import EXTERNAL_IDS, LABEL_TO_CODE  # noqa: E402
 
-ARTIFACT_DIR = os.path.join(ROOT, "artifacts", "possession_arm_v1")
+ARTIFACT_DIR = os.path.join(HERE, "artifacts")
 
 # XGBoost hyper-parameters. Standard multiclass defaults with GPU hist; nothing here
 # is tuned on the competition data. n_estimators is picked by early stopping per fold.
@@ -75,7 +78,7 @@ def load_all(clean_and_dirty: bool = True) -> List[Dict]:
         if clean_and_dirty and is_cached(mid, True):
             files.append(_load_file(mid, True))
     if not files:
-        raise FileNotFoundError("no cache files: run python possession_arm/cache.py first")
+        raise FileNotFoundError("no cache files: run python models/modules/cache.py first")
     if len({tuple(f["names"]) for f in files}) != 1:
         raise RuntimeError("feature names differ between cache files: rebuild the cache")
     return files

@@ -1,6 +1,8 @@
 """Smoke test of the Stage-1 feature builder on ONE external match (not cached).
 
     python possession_arm/smoke_features.py <match_id> [--dirty]
+
+    New location: python models/possession_arm_v1/smoke_features.py <match_id> [--dirty]
 """
 
 import os
@@ -8,15 +10,15 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/possession_arm_v1/ -> models/ -> repo
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import numpy as np  # noqa: E402
 
-from possession_arm.data_external import load_external_match  # noqa: E402
-from possession_arm.features import build_feature_matrix  # noqa: E402
-from possession_arm.half_blocks import detect_half_split, half_blocks_from_tracking  # noqa: E402
+from models.modules.data_external import load_external_match  # noqa: E402
+from models.modules.features_base import build_feature_matrix  # noqa: E402
+from models.modules.half_blocks import detect_half_split, half_blocks_from_tracking  # noqa: E402
 
 
 def main() -> int:

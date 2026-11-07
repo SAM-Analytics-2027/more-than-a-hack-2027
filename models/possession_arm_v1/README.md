@@ -25,33 +25,36 @@ competition data bundle under `data/` and the external labelled matches under
 
     # 0. (device check) XGBoost GPU needs a CUDA device with enough VRAM.
     # 1. features + context masks for every external match file
-    python possession_arm/cache.py --force
+    python models/modules/cache.py --force
     # 2. nested leave-one-match-out fits (early stopping on the NEXT fold),
     #    held-out posteriors + default-parameter scores
-    python possession_arm/eval_external.py
+    python models/possession_arm_v1/eval_external.py
     # 3. final artifact (round count from the LOO p80 best iterations)
-    python possession_arm/train.py --mode final
+    python models/possession_arm_v1/train.py --mode final
     # 4. decoder parameter search on LOO holdout posteriors (external-only),
-    #    writes artifacts/possession_arm_v1/decoder_params.json + search log
-    python possession_arm/search_decoder.py --rounds 4
+    #    writes models/possession_arm_v1/artifacts/decoder_params.json + search log
+    python models/possession_arm_v1/search_decoder.py --rounds 4
     # 5. competition prediction + public-GT SANITY report (not a tuning signal)
-    python possession_arm/predict.py --out evaluation/results/possession_arm_v1.csv
+    python models/possession_arm_v1/predict.py --out evaluation/results/possession_arm_v1.csv
     # 6. official format validation
     python evaluation/validate_submission.py evaluation/results/possession_arm_v1.csv
 
-Everything between steps 1 and 5 lives in `artifacts/possession_arm_v1/`
+Everything between steps 1 and 5 lives in `models/possession_arm_v1/artifacts/`
 (models, metadata, decoder parameters with provenance, search history).
 
-## Module map
+## Layout (from the 2027 refactor)
+
+All models share the same building blocks in `models/modules/` (feature set `v2`);
+this folder holds only what is specific to v1.
 
 | module | role |
 |---|---|
-| `data_external.py` | loaders for the 10 external matches (Barca ATD format), clean labels always from `*_pulite` |
-| `half_blocks.py` | half-time split of the stitched external timelines from goal-zone occupancy (tracking only) |
-| `features.py` | Stage-1 feature matrix (ball evidence, provided verified-control evidence, visibility, team dynamics, smoothed context) |
-| `context.py` | coarse context tiers for the decoder (impact/controlled/occluded/stop/restart), no Smart Tagging |
-| `decode.py` | Stage 2: parameters dataclass, frame costs from posteriors + prior, tier transition costs, per-half `decode_possession_sequence` (provided DP) |
-| `cache.py` | one npz per external file (X, labels, context masks), version-tagged filenames |
+| `models/modules/data_external.py` | loaders for the 10 external matches (Barca ATD format), clean labels always from `*_pulite` |
+| `models/modules/half_blocks.py` | half-time split of the stitched external timelines from goal-zone occupancy (tracking only) |
+| `models/modules/features_base.py` | Stage-1 feature matrix (ball evidence, provided verified-control evidence, visibility, team dynamics, smoothed context) |
+| `models/modules/context.py` | coarse context tiers for the decoder (impact/controlled/occluded/stop/restart), no Smart Tagging |
+| `models/modules/decoder_support.py` | Stage 2: parameters dataclass, frame costs from posteriors + prior, tier transition costs, per-half `decode_possession_sequence` (provided DP) |
+| `models/modules/cache.py` | one npz per external file (X, labels, context masks), version-tagged filenames, LOO posterior paths |
 | `train.py` | XGBoost fitting (nested LOO and the all-matches final artifact) |
 | `eval_external.py` | LOO scores with the repository metric; writes held-out posteriors |
 | `search_decoder.py` | external-only coordinate search of the Stage-2 parameters |

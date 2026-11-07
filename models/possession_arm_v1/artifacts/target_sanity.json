@@ -1,5 +1,5 @@
 {
-  "path": "evaluation\\results\\possession_arm_v1.csv",
+  "path": "evaluation\\results\\possession_verify_tmp.csv",
   "spell_f1_mean": 0.5028571428571429,
   "macro_f1": 0.775911378236958,
   "acc": 0.8186666666666667,

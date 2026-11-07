@@ -22,9 +22,16 @@ decoder parameter learned on the external matches, so a coarse cue boundary does
 encode competition-match knowledge.
 """
 
+import os
+import sys
 from typing import Dict, List, Tuple
 
 import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/modules/ -> models/ -> repo root
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 from possession_model.ball_tracking import detect_ball_control_and_passes  # noqa: E402
 

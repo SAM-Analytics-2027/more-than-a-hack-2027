@@ -2,6 +2,8 @@
 loaders read every file and that the label/block detection behaves sensibly.
 
     python possession_arm/profile_external.py [--dirty]
+
+    New location: python models/possession_arm_v1/profile_external.py [--dirty]
 """
 
 import argparse
@@ -11,12 +13,12 @@ import sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/possession_arm_v1/ -> models/ -> repo
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from possession_arm.data_external import EXTERNAL_IDS, load_external_match
-from possession_arm.half_blocks import detect_half_split
+from models.modules.data_external import EXTERNAL_IDS, load_external_match
+from models.modules.half_blocks import detect_half_split
 
 
 def profile(match_id: str, dirty: bool) -> None:

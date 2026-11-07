@@ -35,7 +35,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/modules/ -> models/ -> repo root
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

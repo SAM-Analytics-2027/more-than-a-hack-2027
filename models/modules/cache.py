@@ -21,14 +21,14 @@ from typing import List
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))    # models/modules/ -> models/ -> repo root
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from possession_arm.context import CONTEXT_KEYS, build_context  # noqa: E402
-from possession_arm.data_external import EXTERNAL_IDS, load_external_match  # noqa: E402
-from possession_arm.features import FEATURE_SET_TAG, build_feature_matrix  # noqa: E402
-from possession_arm.half_blocks import detect_half_split, half_blocks_from_tracking  # noqa: E402
+from models.modules.context import CONTEXT_KEYS, build_context  # noqa: E402
+from models.modules.data_external import EXTERNAL_IDS, load_external_match  # noqa: E402
+from models.modules.features_base import FEATURE_SET_TAG, build_feature_matrix  # noqa: E402
+from models.modules.half_blocks import detect_half_split, half_blocks_from_tracking  # noqa: E402
 
 CACHE_DIR = os.path.join(ROOT, "data", "_arm_cache")
 
@@ -57,6 +57,55 @@ def cache_names() -> List[str]:
     prefix = FEATURE_SET_TAG + "_"
     return [f for f in sorted(os.listdir(CACHE_DIR))
             if f.endswith(".npz") and f.startswith(prefix)]
+
+
+def loo_posterior_path(match_id: str, dirty: bool, model_tag: str | None = None) -> str:
+    """Path of the leave-one-match-out posterior npz for one (match_id, dirty) file.
+
+    The legacy naming (model_tag=None) is 'looP_<tag>_<branch>_<subset>_<match_id>.npz';
+    every other model appends its own tag so families never overwrite each other's
+    posteriors. Passing model_tag=None reproduces the exact legacy name, so the v1
+    files already in the cache keep working untouched.
+    """
+    base = os.path.basename(cache_path(match_id, dirty))
+    stem = base[len(FEATURE_SET_TAG) + 1:]
+    prefix = "looP_" + FEATURE_SET_TAG + "_"
+    if model_tag:
+        prefix += model_tag + "_"
+    return os.path.join(CACHE_DIR, prefix + stem)
+
+
+def loo_posterior_names(model_tag: str | None = None) -> List[str]:
+    """Sorted LOO posterior npz names (model_tag=None -> the legacy untagged set)."""
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    prefix = "looP_" + FEATURE_SET_TAG + "_"
+    if model_tag:
+        prefix += model_tag + "_"
+    return [f for f in sorted(os.listdir(CACHE_DIR))
+            if f.startswith(prefix) and f.endswith(".npz")]
+
+
+def parse_posterior_name(name: str, model_tag: str | None = None) -> tuple:
+    """'looP_<tag>_<branch>_<subset>_<match_id>.npz' -> (match_id, dirty).
+
+    With model_tag set the name must carry that tag ('looP_<tag>_<model_tag>_...')
+    and it is stripped before parsing; ValueError otherwise.
+    """
+    stem = name[:-len(".npz")] if name.endswith(".npz") else name
+    prefix = "looP_" + FEATURE_SET_TAG + "_"
+    if not stem.startswith(prefix):
+        raise ValueError(f"not a LOO posterior file: {name}")
+    rest = stem[len(prefix):]
+    if model_tag:
+        tag_prefix = model_tag + "_"
+        if not rest.startswith(tag_prefix):
+            raise ValueError(f"not a {model_tag} posterior file: {name}")
+        rest = rest[len(tag_prefix):]
+    if "_sporcate_" in rest:
+        dirty, match_id = True, rest.split("_sporcate_", 1)[1]
+    else:
+        dirty, match_id = False, rest.split("_pulite_", 1)[1]
+    return match_id, dirty
 
 
 def is_cached(match_id: str, dirty: bool) -> bool:

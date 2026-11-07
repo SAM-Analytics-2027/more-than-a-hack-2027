@@ -46,7 +46,7 @@ Two design choices worth stating up front, both forced by the compliance rules:
 
 ## 2. What runs when a frame is scored
 
-For the competition match (`possession_arm/predict.py`):
+For the competition match (`models/possession_arm_v1/predict.py`):
 
 1. Load tactical ATD with the provided loader semantics (`load_target_match`).
 2. Build features for all 199,319 frames (NaN where the ball is unseen — XGBoost routes
@@ -54,7 +54,7 @@ For the competition match (`possession_arm/predict.py`):
 3. Build six coarse **context tiers** from tracking only: `impact_loud`,
    `control_loud`, `in_occlusion`, `stop_strong`, `stop_lowtempo`, `restart_cue`.
 4. Stage-1 posterior `P(H/A/D/x_t)` with the final artifact
-   (`artifacts/possession_arm_v1/xgb_final.json`).
+   (`models/possession_arm_v1/artifacts/xgb_final.json`).
 5. Stage-2 decode per half (the two published half blocks), stitch; everything outside
    the blocks is `X` (40,462 rows = exactly the ungraded remainder, 199,319 − 158,857).
 6. Write the submission CSV; validate with `evaluation/validate_submission.py`.
@@ -160,14 +160,15 @@ aggregation rule, and re-learn the duration constraint on the new target style.
 With the repository checked out and the data bundle in place (`requirements.txt`,
 `xgboost` with CUDA):
 
-    python possession_arm/cache.py --force                                  # 1. features + context
-    python possession_arm/eval_external.py                                  # 2. nested LOO + posteriors
-    python possession_arm/train.py --mode final                             # 3. final Stage-1 artifact
-    python possession_arm/search_decoder.py --rounds 4                      # 4. Stage-2 parameter search
-    python possession_arm/predict.py --out evaluation/results/possession_arm_v1.csv   # 5. submission + sanity
+    python models/modules/cache.py --force                                  # 1. features + context
+    python models/possession_arm_v1/eval_external.py                        # 2. nested LOO + posteriors
+    python models/possession_arm_v1/train.py --mode final                   # 3. final Stage-1 artifact
+    python models/possession_arm_v1/search_decoder.py --rounds 4            # 4. Stage-2 parameter search
+    python models/possession_arm_v1/predict.py --out evaluation/results/possession_arm_v1.csv   # 5. submission + sanity
     python evaluation/validate_submission.py evaluation/results/possession_arm_v1.csv # 6. format check
 
-`possession_arm/README.md` documents the module map; `artifacts/possession_arm_v1/`
+`models/possession_arm_v1/README.md` documents the module map; shared building
+blocks for every model live in `models/modules/`; `models/possession_arm_v1/artifacts/`
 contains the models, the decoder parameters with provenance, and the search history.
 Total wall time for the full chain: under two hours on one RTX 5070 Ti (the Stage-2
 search dominates; the provided Viterbi runs ≈ 277 k frames/s, so it is never the
