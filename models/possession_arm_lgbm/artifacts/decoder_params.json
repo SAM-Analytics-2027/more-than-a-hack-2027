@@ -1,0 +1,44 @@
+{
+  "spell_f1_mean": 0.6317516764040179,
+  "params": {
+    "turn_loud": 1.5,
+    "turn_control": 19.0,
+    "turn_occlusion": 54.0,
+    "turn_quiet": 20.0,
+    "stop_loud": 5.5,
+    "stop_quiet": 8.0,
+    "restart_loud": 2.0,
+    "restart_quiet": 18.5,
+    "min_pos_frames": 18,
+    "min_stop_frames": 35,
+    "w_prior": 0.75
+  },
+  "prior": [
+    0.2999719550158454,
+    0.27019379084050815,
+    0.4298342541436464
+  ],
+  "provenance": "coordinate descent on external LOO posteriors; no competition asset",
+  "per_file": {
+    "J03WMX": 0.5895261845386534,
+    "J03WMX_d": 0.5248157248157248,
+    "J03WN1": 0.6021765417170496,
+    "J03WN1_d": 0.5466192170818506,
+    "J03WOH": 0.6525373134328358,
+    "J03WOH_d": 0.5952662721893491,
+    "J03WOY": 0.6215712383488682,
+    "J03WOY_d": 0.564089121887287,
+    "J03WPY": 0.6590846047156725,
+    "J03WPY_d": 0.587431693989071,
+    "J03WQQ": 0.690403337969402,
+    "J03WQQ_d": 0.5871508379888268,
+    "J03WR9": 0.6482539682539683,
+    "J03WR9_d": 0.5915227629513344,
+    "Sample_Game_1": 0.7028667790893761,
+    "Sample_Game_1_d": 0.6000000000000001,
+    "Sample_Game_2": 0.7896013864818023,
+    "Sample_Game_2_d": 0.6762214983713355,
+    "Sample_Game_3": 0.7377386196769458,
+    "Sample_Game_3_d": 0.6681564245810055
+  }
+}
