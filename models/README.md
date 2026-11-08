@@ -29,3 +29,4 @@ One folder per ball-possession model, plus shared building blocks.
 | `possession_arm_v1` | XGBoost GBDT + provided Viterbi | 0.6298 |
 | `possession_arm_seg` | change-point segmentation + segment voting | 0.4755 |
 | `possession_arm_crf` | duration-state CRF (emission MLP + expanded chain) | 0.6448 |
+| `possession_arm_tcn` | TCN temporal net (33-frame windows) | 0.5104 |
