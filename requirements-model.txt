@@ -1,0 +1,8 @@
+# Pinned dependencies for the LightGBM + Viterbi Ball Possession Inference Model
+# and external DFL Leave-One-Match-Out training pipeline (possession_model/).
+-r requirements.txt
+
+lightgbm==4.7.0
+scikit-learn==1.9.1
+scipy==1.18.1
+kloppy==3.18.0
