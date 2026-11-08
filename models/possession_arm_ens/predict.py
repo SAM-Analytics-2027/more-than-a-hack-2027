@@ -51,7 +51,7 @@ def v1_posterior(X: np.ndarray, names) -> np.ndarray:
     return P
 
 
-def ingredient_posterior(family: str, X: np.ndarray, names, f_dict):
+def ingredient_posterior(family: str, X: np.ndarray, names, f_dict, side=None):
     """One ingredient family's FINAL-artifact posterior on the target matrix."""
     if family == "possession_arm_v1":
         return v1_posterior(X, names)
@@ -70,6 +70,9 @@ def ingredient_posterior(family: str, X: np.ndarray, names, f_dict):
     elif family == "possession_arm_seg":
         from models.possession_arm_seg.train import predict_final
         P, inames = predict_final(f_dict), names
+    elif family == "possession_arm_rule":
+        from models.possession_arm_rule.train import predict_final as rule_final
+        P, inames = rule_final(X, side)
     else:
         raise RuntimeError(f"unknown ingredient family: {family}")
     if list(inames) != list(names):
@@ -77,20 +80,20 @@ def ingredient_posterior(family: str, X: np.ndarray, names, f_dict):
     return np.asarray(P, dtype=np.float32).reshape(-1, 3)
 
 
-def load_params() -> tuple:
+def load_params(params_path: str) -> tuple:
     params = params_from_dict({"min_pos_frames": 45, "min_stop_frames": 85, "w_prior": 0.0})
     prior = None
-    if os.path.isfile(PARAMS_PATH):
-        with open(PARAMS_PATH, "r", encoding="utf-8") as handle:
+    if os.path.isfile(params_path):
+        with open(params_path, "r", encoding="utf-8") as handle:
             saved = json.load(handle)
         params = params_from_dict(saved["params"])
         prior = saved.get("prior")
-        print(f"decoder params from {PARAMS_PATH}: "
+        print(f"decoder params from {params_path}: "
               f"min_pos={params.min_pos_frames} min_stop={params.min_stop_frames} "
               f"w_prior={params.w_prior} "
               f"prior={[round(float(x), 4) for x in prior] if prior is not None else None}")
     else:
-        print("decoder params: no learned file found -> defaults copied from the provided pipeline")
+        print(f"decoder params: {params_path} not found -> defaults copied from the provided pipeline")
     return params, prior
 
 
@@ -99,10 +102,19 @@ def main() -> int:
     parser.add_argument("--out",
                         default=os.path.join(ROOT, "evaluation", "results", "possession_arm_ens.csv"))
     parser.add_argument("--families", nargs="*", default=list(INGREDIENTS))
+    parser.add_argument("--weights", nargs="*", type=float, default=None,
+                        help="per-family blend weights (same order as --families; default equal)")
+    parser.add_argument("--log-blend", action="store_true",
+                        help="log-space (geometric) blend, same combiner as train.py")
+    parser.add_argument("--params", default=PARAMS_PATH,
+                        help="decoder_params.json to decode with (default production)")
     args = parser.parse_args()
     families = list(dict.fromkeys(args.families))
     if not families:
         parser.error("--families cannot be empty")
+    weights = list(args.weights) if args.weights is not None else None
+    if weights is not None and len(weights) != len(families):
+        parser.error("--weights count must match --families")
 
     t0 = time.time()
     game = GAME
@@ -124,14 +136,26 @@ def main() -> int:
               "names": names, "blocks": np.asarray(blocks, dtype=np.int64), "ctx": ctx}
     Ps = []
     for family in families:
-        P = ingredient_posterior(family, X, names, f_dict)
+        P = ingredient_posterior(family, X, names, f_dict, side)
         if P.shape != (n, 3):
             raise RuntimeError(f"{family}: posterior shape {P.shape} != ({n}, 3)")
         Ps.append(P)
         print(f"      {family:<25} P ok (rowsum {float(np.abs(P.sum(1) - 1).max()):.2e})")
-    P = np.mean(np.stack(Ps, 0), axis=0).astype(np.float32)
+    stacked = np.stack(Ps, 0)
+    blend = ("log-space geometric" if args.log_blend else "arithmetic mean")
+    print(f"      blend: {blend}" + (f" weights={weights}" if weights is not None else " equal"))
+    if args.log_blend:
+        if weights is None:
+            weights = np.ones(len(Ps)) / len(Ps)
+        W = np.asarray(weights, dtype=np.float64)
+        P_mix = np.exp((np.log(np.clip(stacked, 1e-12, None)) * W[:, None, None]).sum(axis=0))
+        P_mix /= P_mix.sum(axis=1, keepdims=True)
+    else:
+        W = np.ones(len(Ps)) if weights is None else np.asarray(weights, dtype=np.float64)
+        P_mix = (stacked * W[:, None, None]).sum(axis=0)
+    P = P_mix.astype(np.float32)
 
-    params, prior = load_params()
+    params, prior = load_params(args.params)
     states = decode_match(P, ctx, blocks, params, prior=prior)
     labels = np.full(n, "X", dtype="<U1")
     code_map = np.array(("H", "A", "D"), dtype="<U1")

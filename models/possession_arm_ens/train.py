@@ -60,8 +60,16 @@ def validate_families(families, files) -> None:
         raise SystemExit("missing ingredient LOO posteriors ->\n  " + "\n  ".join(missing))
 
 
-def compose_one(match_id: str, dirty: bool, families) -> np.ndarray:
-    """Equal-weight mean of the ingredient families' held-out posteriors [n, 3]."""
+def compose_one(match_id: str, dirty: bool, families, weights=None,
+                log_blend: bool = False) -> np.ndarray:
+    """Blend the ingredient families' held-out posteriors [n, 3].
+
+    Default: arithmetic weighted mean. --log-blend switches to the log-space
+    (geometric) blend rows ∝ prod_f P_f**w_f — each ingredient's log-dominance is
+    preserved instead of being diluted by probability averaging, so a peaky D
+    ingredient (the tagless rule) suppresses wrong H/A mass instead of washing out.
+    Weights must sum to 1 (a proper convex combination in either space).
+    """
     Ps = []
     for family in families:
         with np.load(loo_posterior_path(match_id, dirty,
@@ -69,7 +77,18 @@ def compose_one(match_id: str, dirty: bool, families) -> np.ndarray:
                      allow_pickle=False) as z:
             Ps.append(np.asarray(z["P"], dtype=np.float64))
     stacked = np.stack(Ps, axis=0)
-    return stacked.mean(axis=0).astype(np.float32)
+    if weights is None:
+        weights = np.ones(len(Ps), dtype=np.float64) / len(Ps)
+    else:
+        weights = np.asarray(weights, dtype=np.float64)
+        if weights.shape != (len(Ps),):
+            raise ValueError(f"--weights {weights} does not match {len(Ps)} families")
+    if log_blend:
+        logs = np.log(np.clip(stacked, 1e-12, None))
+        P = np.exp((logs * weights[:, None, None]).sum(axis=0))
+        P /= P.sum(axis=1, keepdims=True)
+        return P.astype(np.float32)
+    return (stacked * weights[:, None, None]).sum(axis=0).astype(np.float32)
 
 
 def main() -> int:
@@ -77,6 +96,10 @@ def main() -> int:
     parser.add_argument("--mode", choices=("loo",), default="loo")
     parser.add_argument("--families", nargs="*", default=list(INGREDIENTS))
     parser.add_argument("--folds", nargs="*", type=int, default=None)
+    parser.add_argument("--weights", nargs="*", type=float, default=None,
+                        help="per-family blend weights (same order as --families; default equal)")
+    parser.add_argument("--log-blend", action="store_true",
+                        help="log-space (geometric) blend instead of the arithmetic mean")
     parser.add_argument("--min-pos-frames", type=int, default=DEFAULT_PARAMS.min_pos_frames)
     parser.add_argument("--min-stop-frames", type=int, default=DEFAULT_PARAMS.min_stop_frames)
     parser.add_argument("--w-prior", type=float, default=DEFAULT_PARAMS.w_prior)
@@ -88,10 +111,15 @@ def main() -> int:
     families = tuple(args.families)
     if not families:
         parser.error("--families cannot be empty")
+    weights = list(args.weights) if args.weights is not None else None
+    if weights is not None and len(weights) != len(families):
+        parser.error("--weights count must match --families")
 
     files = load_all_files(clean_and_dirty=True)
     print(f"cache: {len(files)} files, feature-dim={len(files[0]['names'])}")
     print(f"ingredients: {', '.join(families)}")
+    print(f"blend: {'log-space geometric' if args.log_blend else 'arithmetic mean'}"
+          f"{f'  weights={weights}' if weights is not None else '  equal'}")
     validate_families(families, files)
 
     all_rows = []
@@ -100,7 +128,7 @@ def main() -> int:
         hold = [f for f in files if fold_of(f) == fold]
         for f in hold:
             match_id, dirty = f["match_id"], bool(f["dirty"])
-            P = compose_one(match_id, dirty, families)
+            P = compose_one(match_id, dirty, families, weights, args.log_blend)
             blocks = [tuple(map(int, b)) for b in f["blocks"]]
             states = decode_match(P, f["ctx"], blocks, params)
             s = score_file(f["labels"], states)
