@@ -33,3 +33,4 @@ One folder per ball-possession model, plus shared building blocks.
 | `possession_arm_catboost` | CatBoost GBDT posteriors + shared Viterbi | 0.6444 |
 | `possession_arm_lgbm` | LightGBM GBDT posteriors (CPU) + shared Viterbi | 0.6318 |
 | `possession_arm_tcn` | TCN temporal net (33-frame windows) | 0.5104 |
+| `possession_arm_gate` | situation-gated meta-blend of the trio (cross/MoE form; post-search 0.6495) — investigated, NOT selected | 0.6293 |

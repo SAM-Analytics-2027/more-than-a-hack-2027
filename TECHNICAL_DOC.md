@@ -203,4 +203,5 @@ Completed families so far:
 | `possession_arm_catboost` | CatBoost GBDT (GPU) posteriors under the identical protocol + shared Viterbi/external-only decoder search (min_pos 25, min_stop 85, w_prior 0.75) | 0.6444 |
 | `possession_arm_lgbm` | LightGBM GBDT (CPU: the pip wheel has no CUDA learner) posteriors + shared Viterbi/external-only decoder search (min_pos 18, min_stop 35, w_prior 0.75, turn_loud 1.5) | 0.6318 |
 | `possession_arm_tcn` | temporal conv net (window 33, filled+missing-mask channels), posterior = full-file window sweep | 0.5104 |
+| `possession_arm_gate` | situation-gated meta-blend of the trio (learned per-frame trust over ingredient LOO posteriors + ctx tiers; double-nested). Cross/MoE form post-search 0.6495, mixture prob-space variant 0.6259 — both below the equal-mean ensemble: NOT selected (documented negative result) | 0.6293 (cross, default) |
 
