@@ -199,5 +199,6 @@ Completed families so far:
 | `possession_arm_v1` | XGBoost GBDT (depth-wise hist) | 0.6298 |
 | `possession_arm_seg` | bottom-up change-point segmentation + segment voting | 0.4755 |
 | `possession_arm_crf` | duration-state CRF: emission MLP (218→64→3) + expanded (class, duration-regime) chain, forward-backward per half block | 0.6448 |
+| `possession_arm_catboost` | CatBoost GBDT (GPU) posteriors under the identical protocol + shared Viterbi/external-only decoder search (min_pos 25, min_stop 85, w_prior 0.75) | 0.6444 |
 | `possession_arm_tcn` | temporal conv net (window 33, filled+missing-mask channels), posterior = full-file window sweep | 0.5104 |
 

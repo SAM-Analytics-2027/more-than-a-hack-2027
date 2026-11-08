@@ -1,0 +1,15 @@
+{
+  "path": "C:\\Users\\bossa\\Desktop\\more-than-a-hack-2027\\evaluation\\results\\possession_arm_catboost.csv",
+  "spell_f1_mean": 0.44324324324324316,
+  "macro_f1": 0.7484455681696586,
+  "acc": 0.8030666666666667,
+  "trans_f1_25": 0.2727272727272727,
+  "gt_spells": 17,
+  "pred_spells": 20,
+  "per_class": {
+    "H": 0.856428477431241,
+    "A": 0.8302690149022645,
+    "D": 0.55863921217547
+  },
+  "note": "sanity report on the PUBLIC slice only; no parameter was chosen here"
+}
