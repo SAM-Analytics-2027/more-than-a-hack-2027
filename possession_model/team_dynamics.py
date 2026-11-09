@@ -1,38 +1,20 @@
-"""Collective Team Movement, Spatial Shape, Territorial Tilt, and Pitch Control.
+"""Collective 22-Player Kinematics, Team Spatial Geometry, and Continuous Pitch Control.
 
-Computes permutation-invariant team-level movement and spatial features from anonymous
-player trajectories:
-  1. RMS player speed, walking/standing player fraction (< 1.45 m/s), and sprinting fraction (> 3.2 m/s)
-  2. Collective centre-of-mass speed and directional velocity alignment
-  3. Longitudinal attacking drift along each team's attacking direction
-  4. Outfield lateral width expansion (excluding goalkeepers) and territorial tilt
-  5. Pre-kickoff / post-goal half-field formation separation detector
-  6. Velocity-projected continuous pitch control around the ball
+Computes permutation-invariant team-level and match-level kinematic descriptors from
+anonymous player trajectories in a single vectorized pass.
 """
 
 from typing import Dict, List, Tuple
 import numpy as np
 
-HOME = 0
-AWAY = 1
+from possession_model.signal_ops import AWAY, HOME, box_mean_blocks
 
-
-def moving_average_1d(arr: np.ndarray, half_win: int) -> np.ndarray:
-    """Fast O(N) centred moving average handling NaNs gracefully."""
-    if half_win <= 0:
-        return arr.copy()
-    valid = np.isfinite(arr)
-    vals = np.where(valid, arr, 0.0).astype(np.float64)
-    cs_v = np.concatenate(([0.0], np.cumsum(vals)))
-    cs_c = np.concatenate(([0], np.cumsum(valid.astype(np.int64))))
-    idx = np.arange(len(arr))
-    lo = np.maximum(0, idx - half_win)
-    hi = np.minimum(len(arr), idx + half_win + 1)
-    cnt = cs_c[hi] - cs_c[lo]
-    out = np.full(len(arr), np.nan, dtype=np.float32)
-    ok = cnt > 0
-    out[ok] = ((cs_v[hi[ok]] - cs_v[lo[ok]]) / cnt[ok]).astype(np.float32)
-    return out
+# Standard biomechanical human locomotion gait transitions (m/s):
+# walk-to-jog ~ 1.5 m/s (5.4 km/h), jog-to-run ~ 3.3 m/s (11.9 km/h).
+WALK_GAIT_SPEED_MPS = 1.50
+RUN_GAIT_SPEED_MPS = 3.30
+# Human visual-motor reaction time (s) for off-ball spatial pitch control (Spearman 2017).
+REACTION_TIME_S = 0.50
 
 
 def compute_team_dynamics(
@@ -43,41 +25,47 @@ def compute_team_dynamics(
     kin_ball_xy: np.ndarray,
     half_blocks: List[Tuple[int, int, int]],
     pitch: Tuple[float, float],
+    fps: float = 25.0,
 ) -> Dict[str, np.ndarray]:
-    """Compute collective movement, spatial width, territorial, and pitch-control features per frame."""
+    """Compute collective movement, outfield spatial geometry, set-piece clustering, and pitch control."""
     n_frames = len(player_xy)
     length, width = pitch
     h_mask = slot_teams == HOME
     a_mask = slot_teams == AWAY
 
     # 1. Infer each team's attacking x-direction (+1 or -1) per half from median x position
-    attack_dir_h = np.zeros(n_frames, dtype=np.float32)
+    with np.errstate(all="ignore"):
+        g_med_xh = float(np.nanmedian(player_xy[:, h_mask, 0]))
+        g_med_xa = float(np.nanmedian(player_xy[:, a_mask, 0]))
+    default_dir = 1.0 if g_med_xh < g_med_xa else -1.0
+    attack_dir_h = np.full(n_frames, default_dir, dtype=np.float32)
     for _, s_f, e_f in half_blocks:
         with np.errstate(all="ignore"):
             med_xh = float(np.nanmedian(player_xy[s_f : e_f + 1, h_mask, 0]))
             med_xa = float(np.nanmedian(player_xy[s_f : e_f + 1, a_mask, 0]))
         attack_dir_h[s_f : e_f + 1] = 1.0 if med_xh < med_xa else -1.0
 
-    # 2. Collective Player Speed & Walking / Running Fractions
+    # 2. Match-wide 22-player speed moments & gait fractions
     vis_spd = np.isfinite(player_speed)
     n_vis_spd = vis_spd.sum(axis=1)
     spd_zero = np.where(vis_spd, player_speed, 0.0)
-
-    rms_player_speed = np.zeros(n_frames, dtype=np.float32)
     ok_s = n_vis_spd > 0
-    rms_player_speed[ok_s] = np.sqrt((spd_zero[ok_s] ** 2).sum(axis=1) / n_vis_spd[ok_s])
 
-    walk_cnt = (vis_spd & (player_speed < 1.45)).sum(axis=1)
-    walking_ratio = np.ones(n_frames, dtype=np.float32)
-    walking_ratio[ok_s] = walk_cnt[ok_s] / n_vis_spd[ok_s]
+    rms_speed = np.zeros(n_frames, dtype=np.float32)
+    rms_speed[ok_s] = np.sqrt((spd_zero[ok_s] ** 2).sum(axis=1) / n_vis_spd[ok_s])
 
-    run_cnt = (vis_spd & (player_speed > 3.2)).sum(axis=1)
-    running_ratio = np.zeros(n_frames, dtype=np.float32)
-    running_ratio[ok_s] = run_cnt[ok_s] / n_vis_spd[ok_s]
+    walk_ratio = np.ones(n_frames, dtype=np.float32)
+    walk_ratio[ok_s] = (vis_spd & (player_speed < WALK_GAIT_SPEED_MPS)).sum(axis=1)[ok_s] / n_vis_spd[ok_s]
 
-    n_visible_players = np.isfinite(player_xy[:, :, 0]).sum(axis=1).astype(np.int16)
+    run_ratio = np.zeros(n_frames, dtype=np.float32)
+    run_ratio[ok_s] = (vis_spd & (player_speed > RUN_GAIT_SPEED_MPS)).sum(axis=1)[ok_s] / n_vis_spd[ok_s]
 
-    # 3. Collective Centre-of-Mass Drift & Velocity Alignment
+    # Upper-tail player speed (85th percentile approximated cleanly via order statistics)
+    spd_neg = np.where(vis_spd, player_speed, -1.0)
+    k85 = max(0, spd_neg.shape[1] - 4)
+    p85_speed = np.maximum(0.0, np.partition(spd_neg, kth=k85, axis=1)[:, k85]).astype(np.float32)
+
+    # 3. Collective centre-of-mass velocity & directional alignment ||sum v_i|| / sum ||v_i||
     vis_vel = np.isfinite(player_vel[:, :, 0]) & np.isfinite(player_vel[:, :, 1])
     n_vis_vel = vis_vel.sum(axis=1)
     vx_z = np.where(vis_vel, player_vel[:, :, 0], 0.0)
@@ -89,105 +77,115 @@ def compute_team_dynamics(
     sum_vmag = vmag_z.sum(axis=1)
 
     centroid_speed = np.zeros(n_frames, dtype=np.float32)
-    centroid_vx = np.zeros(n_frames, dtype=np.float32)
-    velocity_alignment = np.zeros(n_frames, dtype=np.float32)
-
+    vel_alignment = np.zeros(n_frames, dtype=np.float32)
     ok_v = n_vis_vel >= 6
-    centroid_vx[ok_v] = sum_vx[ok_v] / n_vis_vel[ok_v]
-    centroid_vy = np.zeros(n_frames, dtype=np.float32)
-    centroid_vy[ok_v] = sum_vy[ok_v] / n_vis_vel[ok_v]
-    centroid_speed[ok_v] = np.hypot(centroid_vx[ok_v], centroid_vy[ok_v])
-    velocity_alignment[ok_v] = np.hypot(sum_vx[ok_v], sum_vy[ok_v]) / (sum_vmag[ok_v] + 1e-5)
+    centroid_speed[ok_v] = np.hypot(sum_vx[ok_v], sum_vy[ok_v]) / n_vis_vel[ok_v]
+    vel_alignment[ok_v] = np.hypot(sum_vx[ok_v], sum_vy[ok_v]) / (sum_vmag[ok_v] + 1e-5)
 
-    # Directed longitudinal drift (>0 means collective movement toward Away's goal -> H attacking)
-    attacking_drift_h = moving_average_1d(centroid_vx * attack_dir_h, half_win=18)
-
-    # 4. Outfield Lateral Width & Territorial Progression (excluding Goalkeepers)
-    def compute_team_width_and_territory(pxy_team: np.ndarray, att_dir: np.ndarray):
-        """Return (transverse_std_y, outfield_mean_progression, opponent_half_count)."""
-        x = pxy_team[:, :, 0]
-        y = pxy_team[:, :, 1]
+    # 4. Per-team outfield spatial moments (excluding deepest player = goalkeeper) & attacking drift
+    def _team_shape(pxy_t: np.ndarray, pvel_t: np.ndarray, att_dir: np.ndarray):
+        x = pxy_t[:, :, 0]
+        y = pxy_t[:, :, 1]
         vis = np.isfinite(x)
-        cnt = vis.sum(axis=1)
+        cnt = vis.sum(axis=1).astype(np.float32)
 
         prog = np.where(att_dir[:, None] >= 0, x, length - x)
         prog_safe = np.where(vis, prog, np.inf)
-        # Identify goalkeeper as the deepest player (min progression) when >= 6 players are visible
         gk_idx = np.argmin(prog_safe, axis=1)
-        outfield_vis = vis.copy()
-        rows_gk = np.flatnonzero(cnt >= 6)
-        outfield_vis[rows_gk, gk_idx[rows_gk]] = False
-        out_cnt = outfield_vis.sum(axis=1)
+        out_vis = vis.copy()
+        has_gk = np.flatnonzero(cnt >= 6)
+        out_vis[has_gk, gk_idx[has_gk]] = False
+        out_cnt = out_vis.sum(axis=1)
+        ok_o = out_cnt >= 4
 
-        ok_o = out_cnt >= 5
-        prog_z = np.where(outfield_vis, prog, 0.0)
-        mean_prog = np.full(n_frames, length * 0.5, dtype=np.float32)
-        mean_prog[ok_o] = (prog_z[ok_o].sum(axis=1) / out_cnt[ok_o]).astype(np.float32)
+        mean_prog = np.full(n_frames, 0.5 * length, dtype=np.float32)
+        mean_prog[ok_o] = (np.where(out_vis, prog, 0.0)[ok_o].sum(axis=1) / out_cnt[ok_o]).astype(np.float32)
 
-        y_z = np.where(outfield_vis, y, 0.0)
-        mean_y = np.zeros(n_frames, dtype=np.float32)
-        mean_y[ok_o] = y_z[ok_o].sum(axis=1) / out_cnt[ok_o]
-        dy2 = np.where(outfield_vis, (y - mean_y[:, None]) ** 2, 0.0)
-        std_y = np.full(n_frames, 10.0, dtype=np.float32)
+        dp2 = np.where(out_vis, (prog - mean_prog[:, None]) ** 2, 0.0)
+        std_x = np.full(n_frames, length / 8.0, dtype=np.float32)
+        std_x[ok_o] = np.sqrt(dp2[ok_o].sum(axis=1) / out_cnt[ok_o]).astype(np.float32)
+
+        mean_y = np.full(n_frames, 0.5 * width, dtype=np.float32)
+        mean_y[ok_o] = (np.where(out_vis, y, 0.0)[ok_o].sum(axis=1) / out_cnt[ok_o]).astype(np.float32)
+
+        dy2 = np.where(out_vis, (y - mean_y[:, None]) ** 2, 0.0)
+        std_y = np.full(n_frames, width / 6.0, dtype=np.float32)
         std_y[ok_o] = np.sqrt(dy2[ok_o].sum(axis=1) / out_cnt[ok_o]).astype(np.float32)
 
-        invading = (vis & (prog > (0.5 * length + 1.8))).sum(axis=1).astype(np.int16)
-        return std_y, mean_prog, invading
+        # Team longitudinal velocity along its own attacking direction
+        vv = np.isfinite(pvel_t[:, :, 0])
+        nv = vv.sum(axis=1)
+        ok_tv = nv >= 3
+        drift = np.zeros(n_frames, dtype=np.float32)
+        vx_t = np.where(vv, pvel_t[:, :, 0], 0.0)
+        drift[ok_tv] = ((vx_t[ok_tv].sum(axis=1) / nv[ok_tv]) * att_dir[ok_tv]).astype(np.float32)
 
-    std_y_h, prog_h, inv_h = compute_team_width_and_territory(
-        player_xy[:, h_mask, :], attack_dir_h
+        # Count of players strictly inside opponent half (beyond centre circle tolerance)
+        opp_half_cnt = (vis & (prog > 0.5 * length + 1.5)).sum(axis=1).astype(np.float32)
+        return cnt, mean_prog, std_x, std_y, drift, opp_half_cnt
+
+    n_vis_h, prog_h, std_x_h, std_y_h, drift_h, inv_h = _team_shape(
+        player_xy[:, h_mask, :], player_vel[:, h_mask, :], attack_dir_h
     )
-    std_y_a, prog_a, inv_a = compute_team_width_and_territory(
-        player_xy[:, a_mask, :], -attack_dir_h
+    n_vis_a, prog_a, std_x_a, std_y_a, drift_a, inv_a = _team_shape(
+        player_xy[:, a_mask, :], player_vel[:, a_mask, :], -attack_dir_h
     )
 
-    # Possessing team expands laterally across the pitch while defending team compacts centrally
-    width_diff_h = moving_average_1d((std_y_h - std_y_a) / 4.5, half_win=30)
-    territory_h = moving_average_1d(((prog_h - prog_a) / (0.35 * length)), half_win=30)
+    # 5. Geometric Set-Piece Spatial Concentration (FIFA penalty area 16.5m x 40.32m, touchline, centre)
+    px_all = player_xy[:, :, 0]
+    py_all = player_xy[:, :, 1]
+    v_all = np.isfinite(px_all)
+    n_vis_tot = v_all.sum(axis=1).astype(np.float32)
 
-    # 5. Pre-Kickoff / Post-Goal Half-Field Formation Detector:
-    # Neither team crosses into the opponent's half (<= 1 player) while tempo is low or players are entering.
-    kickoff_formation_mask = (
-        ((inv_h + inv_a) <= 1) & ((walking_ratio > 0.65) | (n_visible_players < 14))
-    )
+    # FIFA penalty box dimensions: 16.5 m from goal line, +/- 20.16 m from goal centre (0.5 * width)
+    in_box_l = v_all & (px_all <= 16.5) & (np.abs(py_all - 0.5 * width) <= 20.16)
+    in_box_r = v_all & (px_all >= length - 16.5) & (np.abs(py_all - 0.5 * width) <= 20.16)
+    max_in_penalty_box = np.maximum(in_box_l.sum(axis=1), in_box_r.sum(axis=1)).astype(np.float32)
 
-    # 6. Velocity-Projected Continuous Pitch Control around Ball Position
+    near_touchline = (v_all & ((py_all <= 3.0) | (py_all >= width - 3.0))).sum(axis=1).astype(np.float32)
+    half_separation_frac = 1.0 - np.minimum(1.0, (inv_h + inv_a) / np.maximum(1.0, n_vis_tot))
+
+    # 6. Continuous Off-Ball Pitch Control using geometric 22-player Voronoi radius
+    voronoi_radius = float(0.5 * np.sqrt((length * width) / (22.0 * np.pi)))
     pitch_control_h = np.zeros(n_frames, dtype=np.float32)
-    has_kin_ball = np.isfinite(kin_ball_xy[:, 0])
-    kb_idx = np.flatnonzero(has_kin_ball)
+    kb_idx = np.flatnonzero(np.isfinite(kin_ball_xy[:, 0]))
 
-    tau_react = 0.45  # seconds forward velocity projection
-    sigma_pc = 4.8    # spatial influence radius in metres
-
-    chunk = 10000
-    for start in range(0, len(kb_idx), chunk):
-        idx = kb_idx[start : start + chunk]
+    chunk = 12000
+    for s0 in range(0, len(kb_idx), chunk):
+        idx = kb_idx[s0 : s0 + chunk]
         b = kin_ball_xy[idx]
-
-        px = player_xy[idx]
         pv = np.where(np.isfinite(player_vel[idx]), player_vel[idx], 0.0)
-        proj = px + tau_react * pv
-
+        proj = player_xy[idx] + REACTION_TIME_S * pv
         d2 = (proj[:, :, 0] - b[:, None, 0]) ** 2 + (proj[:, :, 1] - b[:, None, 1]) ** 2
-        w = np.where(np.isfinite(d2), np.exp(-0.5 * d2 / (sigma_pc ** 2)), 0.0)
-
+        w = np.where(np.isfinite(d2), np.exp(-0.5 * d2 / (voronoi_radius ** 2)), 0.0)
         wh = w[:, h_mask].sum(axis=1)
         wa = w[:, a_mask].sum(axis=1)
-        pitch_control_h[idx] = ((wh - wa) / (wh + wa + 0.25)).astype(np.float32)
+        pitch_control_h[idx] = ((wh - wa) / (wh + wa + 0.1)).astype(np.float32)
 
+    w1s = int(round(1.0 * fps))
     return {
         "attack_dir_h": attack_dir_h,
-        "rms_player_speed": rms_player_speed,
-        "rms_speed_smooth": moving_average_1d(rms_player_speed, half_win=25),
-        "walking_ratio": walking_ratio,
-        "walking_ratio_smooth": moving_average_1d(walking_ratio, half_win=25),
-        "running_ratio_smooth": moving_average_1d(running_ratio, half_win=25),
-        "centroid_speed_smooth": moving_average_1d(centroid_speed, half_win=18),
-        "velocity_alignment_smooth": moving_average_1d(velocity_alignment, half_win=18),
-        "attacking_drift_h": attacking_drift_h,
-        "width_diff_h": width_diff_h,
-        "territory_h": territory_h,
-        "n_visible_players": n_visible_players,
-        "kickoff_formation_mask": kickoff_formation_mask,
+        "rms_player_speed": rms_speed,
+        "rms_speed_smooth": box_mean_blocks(rms_speed, w1s, w1s, half_blocks),
+        "p85_player_speed": p85_speed,
+        "walking_ratio": walk_ratio,
+        "walking_ratio_smooth": box_mean_blocks(walk_ratio, w1s, w1s, half_blocks, fill=1.0),
+        "running_ratio": run_ratio,
+        "centroid_speed": centroid_speed,
+        "velocity_alignment": vel_alignment,
+        "n_vis_tot": n_vis_tot,
+        "n_vis_h": n_vis_h,
+        "n_vis_a": n_vis_a,
+        "prog_h": prog_h,
+        "prog_a": prog_a,
+        "std_x_h": std_x_h,
+        "std_x_a": std_x_a,
+        "std_y_h": std_y_h,
+        "std_y_a": std_y_a,
+        "drift_h": drift_h,
+        "drift_a": drift_a,
+        "max_in_penalty_box": max_in_penalty_box,
+        "near_touchline": near_touchline,
+        "half_separation_frac": half_separation_frac,
         "pitch_control_h": pitch_control_h,
     }
