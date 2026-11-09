@@ -5,6 +5,9 @@ Completely independent from any possession algorithm:
   - Automatically discovers every *.csv in evaluation/results/ and compares them against
     evaluation/gt/BAR-ATH_possession_gt_public.csv (exact 5-minute solution) and across
     the entire 90-minute match.
+  - Second page (/esterne): the 10 external matches (7 DFL + 3 Metrica, dirtied like BAR-ATH),
+    comparing every model folder in data/risultati_esterne/ against the original labels over
+    whole matches. This is the page to CHOOSE models on; the 5 minutes are for checking only.
 
 Usage:
     python dashboard/app.py
@@ -18,6 +21,7 @@ import os
 import sys
 import threading
 import webbrowser
+import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -258,6 +262,238 @@ def build_dashboard_payload() -> dict:
     }
 
 
+# ------------------------------------------------------------------------------------------------
+# Seconda pagina: le 10 partite esterne (7 DFL + 3 Metrica), sporcate come il Barça
+# ------------------------------------------------------------------------------------------------
+# La soluzione vera di ogni partita sta in data/altre_partite/<fonte>_pulite/<id>/<id>_possession_gt.csv
+# (le etichette originali, mai corrette). Le risposte dei modelli stanno in
+# data/risultati_esterne/<modello>/<id>.csv, nello stesso formato del file del Barça (frame,label), e
+# devono essere previste SENZA aver visto quella partita in allenamento. Tutto resta dentro data/,
+# quindi GitHub non lo vede.
+
+DATA_DIR = os.environ.get("MTAH_DATA_DIR") or os.path.join(ROOT, "data")
+EXT_MATCH_DIR = os.path.join(DATA_DIR, "altre_partite")
+EXT_RESULTS_DIR = os.path.join(DATA_DIR, "risultati_esterne")
+EXT_SOURCES = (("dfl", "DFL"), ("metrica", "Metrica"))
+EXT_FPS = 25.0
+
+
+def _ext_matches() -> list:
+    """[(fonte, nome fonte, id, csv della soluzione, xml)] delle partite esterne con la soluzione."""
+    out = []
+    for src, label in EXT_SOURCES:
+        for folder in sorted(glob.glob(os.path.join(EXT_MATCH_DIR, src + "_pulite", "*"))):
+            mid = os.path.basename(folder)
+            gt = os.path.join(folder, f"{mid}_possession_gt.csv")
+            if os.path.isfile(gt):
+                out.append((src, label, mid, gt, os.path.join(folder, f"{mid}_atd.xml")))
+    return out
+
+
+def _ext_halves(xml_path: str, n_frames: int) -> list:
+    """[(tempo, primo frame, ultimo frame)] dai parametri dell'XML (che contano i frame da 1)."""
+    params = {}
+    try:
+        for el in ET.parse(xml_path).getroot().iter():
+            if el.tag.split("}")[-1] == "ProviderParameter":
+                params.setdefault(el.findtext("Name"), el.findtext("Value"))
+        halves = []
+        for h, key in ((1, "first_half"), (2, "second_half")):
+            if params.get(key + "_start") and params.get(key + "_end"):
+                halves.append((h, int(params[key + "_start"]) - 1, int(params[key + "_end"]) - 1))
+        if halves:
+            return halves
+    except (OSError, ET.ParseError, ValueError):
+        pass
+    return [(1, 0, n_frames - 1)]
+
+
+def _ext_teams(xml_path: str) -> tuple:
+    """(casa, ospiti) dall'XML; None se i nomi sono generici (le partite Metrica dicono solo Home/Away)."""
+    try:
+        names = [el.findtext("Name") for el in ET.parse(xml_path).getroot().iter()
+                 if el.tag.split("}")[-1] == "Team"]
+    except (OSError, ET.ParseError):
+        names = []
+    if len(names) >= 2 and not ({(names[0] or "").lower(), (names[1] or "").lower()} <= {"home", "away", ""}):
+        return names[0], names[1]
+    return None, None
+
+
+def _with_halftime_gap(codes: np.ndarray, halves: list) -> np.ndarray:
+    """Un frame X tra i due tempi: nessun possesso può scavalcare l'intervallo, come nel Barça."""
+    if len(halves) < 2:
+        return codes
+    cut = halves[1][1]
+    return np.concatenate([codes[:cut], np.array([pm.X], dtype=codes.dtype), codes[cut:]])
+
+
+def _ext_compare(gt_codes: np.ndarray, pred_codes: np.ndarray, halves: list, fps: float) -> dict:
+    """Gli stessi numeri della tabella del Barça, ma sull'intera partita."""
+    g = _with_halftime_gap(gt_codes, halves)
+    p = _with_halftime_gap(pred_codes, halves)
+    ev = pm.evaluate(g, p)
+    cm = ev["confusion"]
+    graded = int(np.sum(g != pm.X))
+    correct = int(cm[pm.H][pm.H] + cm[pm.A][pm.A] + cm[pm.D][pm.D])
+    sp50 = ev["spell_f1"][0.5]
+    tr = ev["transitions"][pm.TAUS[-1]]
+    runs = pm.valid_runs(g)
+    filled = pm.fill_abstentions(p, runs)
+    graded_mask = g != pm.X
+    sec = {k: float(np.sum(filled[graded_mask] == c)) / fps for k, c in (("H", pm.H), ("A", pm.A), ("D", pm.D))}
+    return {
+        "spell_f1_mean": ev["spell_f1_mean"],
+        "spell_f1_iou50": ev["spell_f1_at_headline"],
+        "macro_f1": ev["macro_f1"],
+        "f1_D": ev["per_class"]["D"]["f1"],
+        "accuracy_pct": 100.0 * correct / max(1, graded),
+        "err_s": (graded - correct) / fps,
+        "err_swap_ha_s": (cm[pm.H][pm.A] + cm[pm.A][pm.H]) / fps,
+        "err_dead_alive_s": (cm[pm.D][pm.H] + cm[pm.D][pm.A] + cm[pm.H][pm.D] + cm[pm.A][pm.D]) / fps,
+        "n_spells": ev["n_pred_spells"],
+        "spells_matched_50": int(sp50["n_matched"]),
+        "spells_spurious_50": int(sp50["n_spurious"]),
+        "mean_dur_s": ev["mean_spell_duration_s"],
+        "n_trans": int(tr["n_pred"]),
+        "trans_matched_1s": int(tr["n_matched"]),
+        "trans_spurious_1s": int(tr["n_spurious"]),
+        "sec_H": sec["H"], "sec_A": sec["A"], "sec_D": sec["D"],
+    }
+
+
+def _ext_gt_summary(gt_codes: np.ndarray, halves: list, fps: float) -> dict:
+    g = _with_halftime_gap(gt_codes, halves)
+    runs = pm.valid_runs(g)
+    spells = pm.possession_spells(g, runs)
+    segs = pm.segments(g, runs)
+    durs = [(b - a) / fps for a, b, _ in spells]
+    graded = g != pm.X
+    return {
+        "graded_s": float(np.sum(graded)) / fps,
+        "n_spells": len(spells),
+        "n_spells_H": sum(1 for _, _, k in spells if k == pm.H),
+        "n_spells_A": sum(1 for _, _, k in spells if k == pm.A),
+        "n_dead_blocks": sum(1 for _, _, k in segs if k == pm.D),
+        "n_trans": len(pm.transitions(g, runs)),
+        "mean_dur_s": float(np.mean(durs)) if durs else 0.0,
+        "sec_H": float(np.sum(g[graded] == pm.H)) / fps,
+        "sec_A": float(np.sum(g[graded] == pm.A)) / fps,
+        "sec_D": float(np.sum(g[graded] == pm.D)) / fps,
+    }
+
+
+def build_external_payload() -> dict:
+    """Soluzioni delle 10 partite esterne e risposte di ogni modello in data/risultati_esterne/."""
+    models = sorted(
+        d for d in os.listdir(EXT_RESULTS_DIR) if os.path.isdir(os.path.join(EXT_RESULTS_DIR, d))
+    ) if os.path.isdir(EXT_RESULTS_DIR) else []
+    matches, skipped = [], []
+    per_model = {m: [] for m in models}
+    for src, src_label, mid, gt_path, xml_path in _ext_matches():
+        gt_codes = pm.label_codes(pm.read_label_csv(gt_path))
+        n = len(gt_codes)
+        halves = _ext_halves(xml_path, n)
+        home, away = _ext_teams(xml_path)
+        subs = []
+        for m in models:
+            path = os.path.join(EXT_RESULTS_DIR, m, f"{mid}.csv")
+            if not os.path.isfile(path):
+                continue
+            try:
+                df = pm.read_label_csv(path)
+                reason = pm.validate_submission(df, n)
+                if reason:
+                    skipped.append({"name": f"{m}/{mid}", "reason": reason})
+                    continue
+                pred = pm.label_codes(df)
+            except Exception as exc:  # un file rotto non deve fermare la pagina
+                skipped.append({"name": f"{m}/{mid}", "reason": str(exc)})
+                continue
+            row = _ext_compare(gt_codes, pred, halves, EXT_FPS)
+            row.update({"name": m, "is_baseline": m.startswith("baseline_"), "rle": _rle_encode(pred)})
+            subs.append(row)
+            per_model[m].append((src, mid, row["spell_f1_mean"], row["macro_f1"]))
+        subs.sort(key=lambda s: (-s["spell_f1_mean"], -s["macro_f1"], s["name"]))
+        for i, s in enumerate(subs, start=1):
+            s["rank"] = i
+        matches.append({
+            "id": mid, "source": src, "source_label": src_label, "n_frames": n, "fps": EXT_FPS,
+            "home": home, "away": away,
+            "halves": [{"half": h, "start": s, "end": e} for h, s, e in halves],
+            "gt": _ext_gt_summary(gt_codes, halves, EXT_FPS),
+            "gt_rle": _rle_encode(gt_codes),
+            "submissions": subs,
+        })
+
+    n_matches = len(matches)
+    best = {}
+    for mt in matches:
+        if mt["submissions"]:
+            top = mt["submissions"][0]["spell_f1_mean"]
+            for s in mt["submissions"]:
+                if s["spell_f1_mean"] >= top - 1e-12:
+                    best[s["name"]] = best.get(s["name"], 0) + 1
+    summary = []
+    for m, rows in per_model.items():
+        if not rows:
+            continue
+        by_src = {}
+        for src, _, sp, _ in rows:
+            by_src.setdefault(src, []).append(sp)
+        summary.append({
+            "name": m,
+            "is_baseline": m.startswith("baseline_"),
+            "n_matches": len(rows),
+            "complete": len(rows) == n_matches,
+            "spell_f1_mean": float(np.mean([r[2] for r in rows])),
+            "spell_f1_worst": float(np.min([r[2] for r in rows])),
+            "spell_f1_best": float(np.max([r[2] for r in rows])),
+            "macro_f1": float(np.mean([r[3] for r in rows])),
+            "by_source": {src: float(np.mean(v)) for src, v in by_src.items()},
+            "best_in": best.get(m, 0),
+            "per_match": {mid: sp for _, mid, sp, _ in rows},
+        })
+    summary.sort(key=lambda s: (not s["complete"], -s["spell_f1_mean"], s["name"]))
+    for i, s in enumerate(summary, start=1):
+        s["rank"] = i
+    return {
+        "matches": matches,
+        "summary": summary,
+        "sources": [{"id": s, "label": l} for s, l in EXT_SOURCES],
+        "skipped": skipped,
+        "results_dir": os.path.relpath(EXT_RESULTS_DIR, ROOT) if EXT_RESULTS_DIR.startswith(ROOT) else EXT_RESULTS_DIR,
+    }
+
+
+class ExternalCache:
+    data_bytes: bytes = b""
+    signature: tuple = ()
+    lock = threading.Lock()
+
+    @staticmethod
+    def _current_signature() -> tuple:
+        paths = sorted(glob.glob(os.path.join(EXT_RESULTS_DIR, "*", "*.csv")))
+        return tuple((p, os.path.getmtime(p), os.path.getsize(p)) for p in paths)
+
+    @classmethod
+    def refresh(cls) -> bytes:
+        sig = cls._current_signature()
+        raw = json.dumps(build_external_payload(), separators=(",", ":")).encode("utf-8")
+        with cls.lock:
+            cls.data_bytes = raw
+            cls.signature = sig
+        return raw
+
+    @classmethod
+    def get(cls) -> bytes:
+        sig = cls._current_signature()
+        with cls.lock:
+            if cls.data_bytes and cls.signature == sig:
+                return cls.data_bytes
+        return cls.refresh()
+
+
 class DashboardCache:
     data_bytes: bytes = b""
     signature: tuple = ()
@@ -316,6 +552,23 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         elif route == "/api/refresh":
             body = DashboardCache.refresh()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif route in ("/esterne", "/esterne.html"):
+            with open(os.path.join(HERE, "esterne.html"), "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif route == "/api/esterne":
+            body = ExternalCache.get()
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
