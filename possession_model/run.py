@@ -1,8 +1,8 @@
-"""CLI entry-point to run the Ball Possession Inference Model and write a submission CSV.
+"""CLI entry-point to run the Algorithmic Ball Possession Model and write a submission CSV.
 
 Usage:
     python possession_model/run.py
-    python possession_model/run.py --out evaluation/results/possession_v2.csv --no-broadcast
+    python possession_model/run.py --out evaluation/results/possession_v5_gbm.csv
 """
 
 import argparse
@@ -31,21 +31,22 @@ def write_submission(path: str, labels: np.ndarray) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run Ball Possession Inference Model")
+    parser = argparse.ArgumentParser(description="Run 3-Stage LightGBM + Viterbi Ball Possession Inference")
     parser.add_argument(
         "--out",
-        default=os.path.join(ROOT, "evaluation", "results", "possession_v2.csv"),
-        help="Output submission CSV path (default: evaluation/results/possession_v2.csv)",
+        default=os.path.join(ROOT, "evaluation", "results", "possession_v5_gbm.csv"),
+        help="Output submission CSV path (default: evaluation/results/possession_v5_gbm.csv)",
     )
-    parser.add_argument(
-        "--data-dir",
-        default=None,
-        help="Optional override for MTAH_DATA_DIR",
-    )
+    parser.add_argument("--data-dir", default=None, help="Optional override for MTAH_DATA_DIR")
     parser.add_argument(
         "--no-broadcast",
         action="store_true",
-        help="Disable automatic Broadcast ATD camera fusion",
+        help="Disable Broadcast ATD camera synchronization",
+    )
+    parser.add_argument(
+        "--model-dir",
+        default=None,
+        help="Optional path to trained LightGBM model bundle directory",
     )
     args = parser.parse_args()
 
@@ -53,6 +54,7 @@ def main() -> int:
         game=GAME,
         data_dir=args.data_dir,
         use_broadcast=not args.no_broadcast,
+        model_dir=args.model_dir,
         verbose=True,
     )
     out_path = write_submission(args.out, labels)
