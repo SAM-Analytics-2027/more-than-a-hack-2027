@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Partite Esterne</title>
+  <style>
+    :root {
+      --bg: #f3f5f8;
+      --card: #ffffff;
+      --border: #d8e0ea;
+      --border-soft: #e8eef5;
+      --text: #0f172a;
+      --text-sec: #334155;
+      --muted: #64748b;
+
+      --barca: #2563eb;
+      --athletic: #ea580c;
+      --dead: #94a3b8;
+      --ungraded: #e2e8f0;
+
+      --ok: #16a34a;
+      --err: #dc2626;
+      --primary: #2563eb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.45;
+      font-variant-numeric: tabular-nums;
+      padding: 16px 22px 36px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .section-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-title-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title-group h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .context-pill {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-sec);
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+
+    /* Buttons */
+    button {
+      background: #ffffff;
+      color: var(--text-sec);
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    button:hover { background: #f1f5f9; border-color: #94a3b8; }
+    button.active-preset {
+      background: #eff6ff;
+      border-color: #2563eb;
+      color: #1d4ed8;
+    }
+
+    /* Timeline Controls & Legend */
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+    }
+
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      font-size: 13px;
+      color: var(--text-sec);
+    }
+    .leg-item { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+    .swatch {
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      display: inline-block;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+    }
+
+    .model-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .toggle-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 4px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .toggle-chip:hover { background: #f1f5f9; }
+    .toggle-chip input { accent-color: var(--primary); cursor: pointer; }
+
+    .canvas-wrap {
+      position: relative;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #ffffff;
+      cursor: grab;
+    }
+    .canvas-wrap:active { cursor: grabbing; }
+    canvas#timelineCanvas { display: block; width: 100%; }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 11px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-soft);
+      vertical-align: middle;
+    }
+    th {
+      background: #f8fafc;
+      color: var(--text-sec);
+      font-size: 13px;
+      font-weight: 700;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    th.num, td.num { text-align: right; }
+
+    tbody tr:hover { background: #f8fafc; }
+
+    tr.gt-ref-row {
+      background: #fefce8 !important;
+    }
+    tr.gt-ref-row td {
+      border-bottom: 2px solid #facc15;
+    }
+    tr.selected-row {
+      background: #eff6ff !important;
+    }
+
+    .val-main {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .val-sub {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    .tag-ours {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      background: #dbeafe;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: 1px;
+    }
+    .tag-gt {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      background: #fef08a;
+      color: #854d0e;
+      border: 1px solid #facc15;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: 1px;
+    }
+
+    .diff-pill {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 5px;
+      margin-left: 5px;
+    }
+    .diff-good { background: #dcfce7; color: #15803d; }
+    .diff-warn { background: #fef3c7; color: #b45309; }
+    .diff-bad  { background: #fee2e2; color: #b91c1c; }
+
+    /* Tooltip */
+    .hover-tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #ffffff;
+      color: var(--text);
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px 13px;
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+      z-index: 999;
+      display: none;
+      min-width: 245px;
+    }
+    .tt-title {
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+    }
+    .tt-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      padding: 2px 0;
+    }
+    .pill {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 12px;
+      color: #ffffff;
+    }
+    .pill-H { background: var(--barca); }
+    .pill-A { background: var(--athletic); }
+    .pill-D { background: #64748b; }
+    .pill-X { background: #e2e8f0; color: #475569; }
+
+    .nav-bar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+    .nav-bar a {
+      text-decoration: none; font-weight: 600; font-size: 13.5px; color: var(--text-sec);
+      background: var(--card); border: 1px solid var(--border); padding: 6px 14px; border-radius: 999px;
+    }
+    .nav-bar a.nav-active { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+    .nav-note { font-size: 12.5px; color: var(--muted); margin-left: 6px; }
+    .note-box {
+      font-size: 13px; color: var(--text-sec); background: #f8fafc; border: 1px solid var(--border-soft);
+      border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+    }
+    select.match-select {
+      font-size: 13.5px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
+      border: 1px solid var(--border); background: #ffffff; color: var(--text);
+    }
+    td.cell-score { text-align: right; cursor: pointer; font-weight: 600; }
+    td.cell-best { outline: 2px solid #16a34a; outline-offset: -2px; }
+    th.cell-match { text-align: right; cursor: pointer; }
+    th.cell-match.cur { color: var(--primary); }
+  </style>
+</head>
+<body>
+
+  <nav class="nav-bar">
+    <a href="/">Barça — 5 minuti pubblici</a>
+    <a href="/esterne" class="nav-active">Partite esterne (DFL + Metrica)</a>
+    <span class="nav-note">I 5 minuti servono a controllare; per scegliere un modello si guarda questa pagina.</span>
+  </nav>
+
+  <!-- 1. RIEPILOGO SULLE PARTITE ESTERNE -->
+  <section class="card">
+    <div class="section-top">
+      <div class="section-title-group">
+        <h2>Riepilogo — Partite Esterne Sporcate</h2>
+        <span class="context-pill" id="summaryInfo"></span>
+      </div>
+    </div>
+    <div class="note-box">
+      Ogni modello è giudicato sulle partite intere, con le <b>etichette originali</b> e lo stesso codice ufficiale
+      del punteggio. Le risposte vanno in <code id="resultsDir"></code><code>/&lt;modello&gt;/&lt;partita&gt;.csv</code>
+      (stesso formato del file del Barça) e devono essere previste <b>senza aver visto quella partita in allenamento</b>.
+      La media è sulle partite; accanto, la media per fonte e la <b>stabilità</b> (la partita peggiore e la migliore):
+      un modello affidabile ha la media alta e l'ampiezza piccola.
+    </div>
+    <div class="table-wrap">
+      <table id="tableSummary">
+        <thead>
+          <tr>
+            <th>Modello</th>
+            <th class="num">Voto Azioni (spellF1)</th>
+            <th class="num">DFL</th>
+            <th class="num">Metrica</th>
+            <th class="num">Stabilità<br>(peggiore – migliore)</th>
+            <th class="num">Voto Frame (macroF1)</th>
+            <th class="num">Migliore in</th>
+            <th class="num">Partite</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 2. PARTITA PER PARTITA -->
+  <section class="card">
+    <div class="section-top">
+      <div class="section-title-group">
+        <h2>Partita per Partita — Voto Azioni (spellF1)</h2>
+        <span class="context-pill">clic su una colonna per aprire la partita</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="tableGrid"><thead></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <!-- 3. CONFRONTO TEMPORALE DELLA PARTITA SCELTA -->
+  <section class="card">
+    <div class="section-top">
+      <div class="section-title-group">
+        <h2>Confronto Temporale</h2>
+        <select class="match-select" id="matchSelect"></select>
+        <span class="context-pill" id="rangeInfo"></span>
+      </div>
+      <div class="legend-bar">
+        <span class="leg-item"><span class="swatch" style="background:var(--barca)"></span> <span id="legHome">Casa (H)</span></span>
+        <span class="leg-item"><span class="swatch" style="background:var(--athletic)"></span> <span id="legAway">Ospiti (A)</span></span>
+        <span class="leg-item"><span class="swatch" style="background:var(--dead)"></span> Gioco Fermo (D)</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--ok)"></span> Corretto</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--err)"></span> Errore</span>
+      </div>
+    </div>
+
+    <div class="controls-row">
+      <div class="btn-group" id="presetGroup">
+        <button id="btnPresetStart" class="active-preset">Primi 5 Minuti</button>
+        <button id="btnPresetH1">1° Tempo</button>
+        <button id="btnPresetH2">2° Tempo</button>
+        <button id="btnPresetAll">Intera Partita</button>
+      </div>
+      <div class="btn-group">
+        <button id="btnZoomIn">Zoom +</button>
+        <button id="btnZoomOut">Zoom −</button>
+        <button id="btnResetZoom">Reset</button>
+      </div>
+    </div>
+
+    <div class="model-toggles" id="modelToggles"></div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="timelineCanvas" height="320"></canvas>
+    </div>
+  </section>
+
+  <!-- 4. TABELLA DELLA PARTITA SCELTA -->
+  <section class="card">
+    <div class="section-top">
+      <div class="section-title-group">
+        <h2 id="matchTableTitle">Partita Intera — Scostamento dalla Soluzione Vera</h2>
+        <span class="context-pill" id="matchTableInfo"></span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="tableMatch">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th class="num">Voto Azioni (spellF1)</th>
+            <th class="num">Voto Frame (macroF1)</th>
+            <th>Frame Uguali / Errori</th>
+            <th>Azioni Individuate (H+A)</th>
+            <th>Cambi di Stato</th>
+            <th class="num" id="thHome">Casa (H)</th>
+            <th class="num" id="thAway">Ospiti (A)</th>
+            <th class="num">Gioco Fermo (D)</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="hover-tooltip" id="tooltip"></div>
+
+  <script>
+    const CODE_NAMES = ["H", "A", "D", "X"];
+    const CODE_LABELS_IT = { 0: "H · Casa", 1: "A · Ospiti", 2: "D · Gioco Fermo", 3: "X · Non valutato" };
+    const CODE_COLORS = { 0: "#2563eb", 1: "#ea580c", 2: "#94a3b8", 3: "#e2e8f0" };
+    const LABEL_COL_W = 276;
+    const RIGHT_PAD = 14;
+
+    let DATA = null;
+    let matchIdx = 0;
+    let selectedModel = "";
+    let visibleModels = new Set();
+    let viewStart = 0, viewEnd = 1, currentPreset = "start";
+
+    const M = () => DATA.matches[matchIdx];
+    const fmt1 = x => (x * 100).toFixed(1);
+    const nf = n => n.toLocaleString("it-IT");
+
+    function codeAtFrame(rle, frame) {
+      let lo = 0, hi = rle.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const seg = rle[mid];
+        if (frame < seg[0]) hi = mid - 1;
+        else if (frame >= seg[1]) lo = mid + 1;
+        else return seg[2];
+      }
+      return 3;
+    }
+
+    function firstSegIndex(rle, a) {
+      let lo = 0, hi = rle.length - 1, idx = rle.length;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (rle[mid][1] <= a) lo = mid + 1;
+        else { idx = mid; hi = mid - 1; }
+      }
+      return idx;
+    }
+
+    function windowStatsFromRle(rle, vStart, vEnd) {
+      const a = Math.max(0, Math.floor(vStart));
+      const b = Math.min(M().n_frames, Math.ceil(vEnd));
+      let actions = 0, changes = 0, prev = -1, hasGraded = false;
+      for (let i = firstSegIndex(rle, a); i < rle.length; i++) {
+        const [s, e, code] = rle[i];
+        if (s >= b) break;
+        if (code === 3) { prev = -1; continue; }
+        hasGraded = true;
+        if (code === 0 || code === 1) actions++;
+        if (prev !== -1 && code !== prev) changes++;
+        prev = code;
+      }
+      return { actions, changes, hasGraded };
+    }
+
+    function walkPairs(gtRle, predRle, a, b, fn) {
+      let i = firstSegIndex(gtRle, a), j = firstSegIndex(predRle, a), cur = a;
+      while (cur < b && i < gtRle.length && j < predRle.length) {
+        const g = gtRle[i], p = predRle[j];
+        const nextEnd = Math.min(b, g[1], p[1]);
+        if (nextEnd > cur && g[2] !== 3) fn(cur, nextEnd, g[2] === p[2]);
+        cur = nextEnd;
+        if (g[1] <= cur) i++;
+        if (p[1] <= cur) j++;
+      }
+    }
+
+    function windowAgreementPct(gtRle, predRle, vStart, vEnd) {
+      let same = 0, tot = 0;
+      walkPairs(gtRle, predRle, Math.max(0, Math.floor(vStart)), Math.min(M().n_frames, Math.ceil(vEnd)),
+        (s, e, ok) => { tot += e - s; if (ok) same += e - s; });
+      return tot > 0 ? 100.0 * same / tot : null;
+    }
+
+    function formatMatchClock(frame) {
+      const m = M(), fps = m.fps;
+      for (const h of m.halves) {
+        if (frame >= h.start && frame <= h.end) {
+          const s = (h.half === 2 ? 45 * 60 : 0) + (frame - h.start) / fps;
+          return `${h.half}°T ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+        }
+      }
+      const s = frame / fps;
+      return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+    }
+
+    function signedInt(n) { return n > 0 ? `+${n}` : `${n}`; }
+    function signedSec(x) { return `${x >= 0 ? "+" : ""}${x.toFixed(1)}s`; }
+    function diffBadgeInt(diff, goodTol, warnTol) {
+      const a = Math.abs(diff);
+      const cls = a <= goodTol ? "diff-good" : (a <= warnTol ? "diff-warn" : "diff-bad");
+      return `<span class="diff-pill ${cls}">${diff === 0 ? "0" : signedInt(diff)}</span>`;
+    }
+    function diffBadgeSec(diff, goodTol, warnTol) {
+      const a = Math.abs(diff);
+      const cls = a <= goodTol ? "diff-good" : (a <= warnTol ? "diff-warn" : "diff-bad");
+      return `<span class="diff-pill ${cls}">${signedSec(diff)}</span>`;
+    }
+    function diffBadgeMin(diffMin, goodTol, warnTol) {
+      const a = Math.abs(diffMin);
+      const cls = a <= goodTol ? "diff-good" : (a <= warnTol ? "diff-warn" : "diff-bad");
+      return `<span class="diff-pill ${cls}">${diffMin >= 0 ? "+" : ""}${diffMin.toFixed(1)} min</span>`;
+    }
+    function tagOf(name, isBaseline) { return isBaseline ? "" : '<span class="tag-ours">NOSTRO</span>'; }
+
+    async function loadData() {
+      const res = await fetch("/api/esterne");
+      DATA = await res.json();
+      document.getElementById("resultsDir").textContent = DATA.results_dir;
+      const ours = DATA.summary.find(s => !s.is_baseline);
+      selectedModel = ours ? ours.name : (DATA.summary[0] ? DATA.summary[0].name : "");
+      DATA.summary.forEach(s => visibleModels.add(s.name));
+      const sel = document.getElementById("matchSelect");
+      sel.innerHTML = DATA.matches.map((m, i) =>
+        `<option value="${i}">${m.source_label} · ${m.id}${m.home ? ` · ${m.home} – ${m.away}` : ""}</option>`).join("");
+      sel.addEventListener("change", e => pickMatch(parseInt(e.target.value, 10)));
+      pickMatch(0);
+    }
+
+    function pickMatch(i) {
+      matchIdx = i;
+      const m = DATA.matches[i];
+      document.getElementById("legHome").textContent = m.home ? `${m.home} (H)` : "Casa (H)";
+      document.getElementById("legAway").textContent = m.away ? `${m.away} (A)` : "Ospiti (A)";
+      document.getElementById("matchSelect").value = String(i);
+      setPreset(currentPreset, false);
+      renderAll();
+    }
+
+    function setPreset(which, redraw = true) {
+      currentPreset = which;
+      document.querySelectorAll("#presetGroup button").forEach(b => b.classList.remove("active-preset"));
+      const m = M(), h = m.halves;
+      if (which === "start") {
+        viewStart = h[0].start; viewEnd = Math.min(m.n_frames, h[0].start + 5 * 60 * m.fps);
+        document.getElementById("btnPresetStart").classList.add("active-preset");
+      } else if (which === "h1") {
+        viewStart = h[0].start; viewEnd = h[0].end + 1;
+        document.getElementById("btnPresetH1").classList.add("active-preset");
+      } else if (which === "h2" && h.length > 1) {
+        viewStart = h[1].start; viewEnd = h[1].end + 1;
+        document.getElementById("btnPresetH2").classList.add("active-preset");
+      } else {
+        viewStart = 0; viewEnd = m.n_frames;
+        document.getElementById("btnPresetAll").classList.add("active-preset");
+      }
+      if (redraw) drawTimeline();
+    }
+
+    function renderSummary() {
+      const nM = DATA.matches.length;
+      document.getElementById("summaryInfo").textContent =
+        `${nM} partite · ${DATA.matches.filter(m => m.source === "dfl").length} DFL + ${DATA.matches.filter(m => m.source === "metrica").length} Metrica · ` +
+        `${(DATA.matches.reduce((t, m) => t + m.gt.graded_s, 0) / 3600).toFixed(1)} ore di gioco · ` +
+        `${nf(DATA.matches.reduce((t, m) => t + m.gt.n_spells, 0))} possessi veri`;
+      const tbody = document.querySelector("#tableSummary tbody");
+      tbody.innerHTML = DATA.summary.map(s => `
+        <tr class="${s.name === selectedModel ? 'selected-row' : ''}" data-pick="${s.name}" style="cursor:pointer">
+          <td><div class="val-main">#${s.rank} · ${s.name}${tagOf(s.name, s.is_baseline)}</div>
+              ${s.complete ? "" : `<div class="val-sub">incompleto: ${s.n_matches}/${nM} partite, media non confrontabile</div>`}</td>
+          <td class="num"><div class="val-main">${fmt1(s.spell_f1_mean)}</div></td>
+          <td class="num"><div class="val-main">${s.by_source.dfl !== undefined ? fmt1(s.by_source.dfl) : "—"}</div></td>
+          <td class="num"><div class="val-main">${s.by_source.metrica !== undefined ? fmt1(s.by_source.metrica) : "—"}</div></td>
+          <td class="num"><div class="val-main">${fmt1(s.spell_f1_worst)} – ${fmt1(s.spell_f1_best)}</div>
+              <div class="val-sub">ampiezza ${fmt1(s.spell_f1_best - s.spell_f1_worst)}</div></td>
+          <td class="num"><div class="val-main">${fmt1(s.macro_f1)}</div></td>
+          <td class="num"><div class="val-main">${s.best_in} / ${nM}</div></td>
+          <td class="num"><div class="val-main">${s.n_matches} / ${nM}</div></td>
+        </tr>`).join("");
+      tbody.querySelectorAll("tr[data-pick]").forEach(r => r.addEventListener("click", () => {
+        selectedModel = r.getAttribute("data-pick"); renderAll();
+      }));
+    }
+
+    function renderGrid() {
+      const thead = document.querySelector("#tableGrid thead");
+      const tbody = document.querySelector("#tableGrid tbody");
+      thead.innerHTML = `<tr><th>Modello</th>${DATA.matches.map((m, i) =>
+        `<th class="cell-match ${i === matchIdx ? 'cur' : ''}" data-match="${i}">${m.source_label}<br>${m.id}</th>`).join("")}</tr>`;
+      const bestOf = DATA.matches.map(m => m.submissions.length ? m.submissions[0].spell_f1_mean : null);
+      tbody.innerHTML = DATA.summary.map(s => `
+        <tr class="${s.name === selectedModel ? 'selected-row' : ''}">
+          <td><div class="val-main">${s.name}${tagOf(s.name, s.is_baseline)}</div></td>
+          ${DATA.matches.map((m, i) => {
+            const v = s.per_match[m.id];
+            if (v === undefined) return `<td class="cell-score" data-match="${i}">—</td>`;
+            const best = bestOf[i] !== null && v >= bestOf[i] - 1e-12;
+            return `<td class="cell-score ${best ? 'cell-best' : ''}" data-match="${i}">${fmt1(v)}</td>`;
+          }).join("")}
+        </tr>`).join("");
+      document.querySelectorAll("#tableGrid [data-match]").forEach(c => c.addEventListener("click", () => {
+        pickMatch(parseInt(c.getAttribute("data-match"), 10));
+        document.getElementById("canvasWrap").scrollIntoView({ behavior: "smooth", block: "center" });
+      }));
+    }
+
+    function renderToggles() {
+      const wrap = document.getElementById("modelToggles");
+      wrap.innerHTML = M().submissions.map(s => `
+        <label class="toggle-chip">
+          <input type="checkbox" data-model="${s.name}" ${visibleModels.has(s.name) ? "checked" : ""} />
+          <span>${s.name}${tagOf(s.name, s.is_baseline)}</span>
+        </label>`).join("");
+      wrap.querySelectorAll("input[data-model]").forEach(inp => inp.addEventListener("change", e => {
+        const m = e.target.getAttribute("data-model");
+        if (e.target.checked) visibleModels.add(m); else visibleModels.delete(m);
+        drawTimeline();
+      }));
+    }
+
+    function drawRleRow(ctx, rle, vStart, vEnd, xLeft, plotW, yTop, rowH) {
+      const span = vEnd - vStart;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(xLeft, yTop, plotW, rowH); ctx.clip();
+      for (let i = firstSegIndex(rle, vStart); i < rle.length; i++) {
+        const [s, e, code] = rle[i];
+        if (s >= vEnd) break;
+        const cs = Math.max(s, vStart), ce = Math.min(e, vEnd);
+        const x1 = xLeft + ((cs - vStart) / span) * plotW;
+        const x2 = xLeft + ((ce - vStart) / span) * plotW;
+        const w = Math.max(0.8, x2 - x1);
+        ctx.fillStyle = CODE_COLORS[code] || "#e2e8f0";
+        ctx.fillRect(x1, yTop, w, rowH);
+        if (w >= 4 && cs === s && s > vStart) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+          ctx.fillRect(x1, yTop, 1, rowH);
+        }
+        if (code !== 3 && w >= 30) {
+          const durSec = ((e - s) / M().fps).toFixed(0);
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+          ctx.fillText(w >= 72 ? `${CODE_NAMES[code]} (${durSec}s)` : CODE_NAMES[code], x1 + 6, yTop + rowH / 2 + 4);
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawAgreementStrip(ctx, gtRle, predRle, vStart, vEnd, xLeft, plotW, yTop, stripH) {
+      const span = vEnd - vStart;
+      walkPairs(gtRle, predRle, Math.max(0, Math.floor(vStart)), Math.min(M().n_frames, Math.ceil(vEnd)), (s, e, ok) => {
+        const x1 = xLeft + ((s - vStart) / span) * plotW;
+        const x2 = xLeft + ((e - vStart) / span) * plotW;
+        ctx.fillStyle = ok ? "#16a34a" : "#dc2626";
+        ctx.fillRect(x1, yTop, Math.max(0.8, x2 - x1), stripH);
+      });
+    }
+
+    function drawTimeline() {
+      if (!DATA) return;
+      const m = M();
+      const canvas = document.getElementById("timelineCanvas");
+      const wrap = document.getElementById("canvasWrap");
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = wrap.clientWidth;
+      const subs = m.submissions.filter(s => visibleModels.has(s.name));
+      const axisH = 34, gtRowH = 52, subRowH = 54;
+      const cssH = axisH + gtRowH + subs.length * subRowH;
+      canvas.style.height = cssH + "px";
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cssW, cssH);
+
+      const plotW = Math.max(100, cssW - LABEL_COL_W - RIGHT_PAD);
+      const span = viewEnd - viewStart, secSpan = span / m.fps;
+      document.getElementById("rangeInfo").textContent =
+        `${formatMatchClock(Math.round(viewStart))} → ${formatMatchClock(Math.round(viewEnd) - 1)} · ${secSpan < 180 ? secSpan.toFixed(1) + ' s' : (secSpan / 60).toFixed(1) + ' min'}`;
+
+      ctx.fillStyle = "#f8fafc"; ctx.fillRect(0, 0, cssW, axisH);
+      ctx.strokeStyle = "#cbd5e1"; ctx.beginPath(); ctx.moveTo(0, axisH); ctx.lineTo(cssW, axisH); ctx.stroke();
+      ctx.fillStyle = "#334155";
+      ctx.font = "bold 12.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText("File (Azioni · Cambi nel tratto)", 12, 22);
+
+      const targetTicks = Math.max(4, Math.floor(plotW / 120));
+      const rawStepSec = secSpan / targetTicks;
+      const stepSec = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900].find(s => s >= rawStepSec) || 1200;
+      const stepFrames = stepSec * m.fps;
+      ctx.font = "600 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      for (let f = Math.ceil(viewStart / stepFrames) * stepFrames; f <= viewEnd; f += stepFrames) {
+        const x = LABEL_COL_W + ((f - viewStart) / span) * plotW;
+        ctx.strokeStyle = "#e2e8f0"; ctx.beginPath(); ctx.moveTo(x, axisH); ctx.lineTo(x, cssH); ctx.stroke();
+        ctx.fillStyle = "#475569"; ctx.fillText(formatMatchClock(f), x + 5, 22);
+      }
+
+      let y = axisH;
+      ctx.fillStyle = "#fefce8"; ctx.fillRect(0, y, cssW, gtRowH);
+      ctx.strokeStyle = "#facc15"; ctx.beginPath(); ctx.moveTo(0, y + gtRowH); ctx.lineTo(cssW, y + gtRowH); ctx.stroke();
+      const gtSt = windowStatsFromRle(m.gt_rle, viewStart, viewEnd);
+      ctx.fillStyle = "#854d0e";
+      ctx.font = "bold 13.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText(`★ Soluzione Vera (${m.id})`, 12, y + 22);
+      ctx.fillStyle = "#a16207";
+      ctx.font = "600 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillText(gtSt.hasGraded ? `${gtSt.actions} azioni · ${gtSt.changes} cambi` : "Non valutato in questo tratto", 12, y + 40);
+      drawRleRow(ctx, m.gt_rle, viewStart, viewEnd, LABEL_COL_W, plotW, y + 9, gtRowH - 18);
+      ctx.strokeStyle = "#eab308"; ctx.strokeRect(LABEL_COL_W, y + 9, plotW, gtRowH - 18);
+      y += gtRowH;
+
+      subs.forEach(sub => {
+        const isSel = sub.name === selectedModel;
+        if (isSel) { ctx.fillStyle = "#eff6ff"; ctx.fillRect(0, y, cssW, subRowH); }
+        ctx.strokeStyle = "#e8eef5"; ctx.beginPath(); ctx.moveTo(0, y + subRowH); ctx.lineTo(cssW, y + subRowH); ctx.stroke();
+        ctx.fillStyle = isSel ? "#1d4ed8" : "#0f172a";
+        ctx.font = "bold 13.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+        ctx.fillText(sub.name, 12, y + 21);
+        const st = windowStatsFromRle(sub.rle, viewStart, viewEnd);
+        const agree = windowAgreementPct(m.gt_rle, sub.rle, viewStart, viewEnd);
+        let line = `${st.actions} az. (${signedInt(st.actions - gtSt.actions)}) · ${st.changes} cambi (${signedInt(st.changes - gtSt.changes)})`;
+        if (agree !== null) line += ` · ${agree.toFixed(1)}%`;
+        ctx.fillStyle = "#64748b";
+        ctx.font = "500 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+        ctx.fillText(line, 12, y + 40);
+        const barH = 28, barY = y + 8;
+        drawRleRow(ctx, sub.rle, viewStart, viewEnd, LABEL_COL_W, plotW, barY, barH);
+        ctx.strokeStyle = "#cbd5e1"; ctx.strokeRect(LABEL_COL_W, barY, plotW, barH);
+        drawAgreementStrip(ctx, m.gt_rle, sub.rle, viewStart, viewEnd, LABEL_COL_W, plotW, barY + barH + 3, 6);
+        y += subRowH;
+      });
+      ctx.strokeStyle = "#cbd5e1"; ctx.beginPath(); ctx.moveTo(LABEL_COL_W, 0); ctx.lineTo(LABEL_COL_W, cssH); ctx.stroke();
+    }
+
+    function renderMatchTable() {
+      const m = M(), g = m.gt;
+      document.getElementById("matchTableTitle").textContent =
+        `${m.source_label} · ${m.id}${m.home ? ` (${m.home} – ${m.away})` : ""} — Scostamento dalla Soluzione Vera`;
+      document.getElementById("thHome").textContent = m.home ? `${m.home} (H)` : "Casa (H)";
+      document.getElementById("thAway").textContent = m.away ? `${m.away} (A)` : "Ospiti (A)";
+      document.getElementById("matchTableInfo").textContent = `partita intera · ${nf(Math.round(g.graded_s * m.fps))} frame valutati · ${(g.graded_s / 60).toFixed(1)} min`;
+      const tot = g.graded_s;
+      let html = `
+        <tr class="gt-ref-row">
+          <td><div class="val-main">${m.id} <span class="tag-gt">SOLUZIONE VERA</span></div></td>
+          <td class="num"><div class="val-main">100,0</div></td>
+          <td class="num"><div class="val-main">100,0</div></td>
+          <td><div class="val-main">100,0% uguali</div></td>
+          <td><div class="val-main">${g.n_spells} azioni</div>
+              <div class="val-sub">${g.n_spells_H} casa · ${g.n_spells_A} ospiti · media ${g.mean_dur_s.toFixed(1)}s</div></td>
+          <td><div class="val-main">${g.n_trans} cambi</div><div class="val-sub">${g.n_dead_blocks} periodi di gioco fermo</div></td>
+          <td class="num"><div class="val-main">${(g.sec_H / 60).toFixed(1)} min</div><div class="val-sub">${(100 * g.sec_H / tot).toFixed(1)}%</div></td>
+          <td class="num"><div class="val-main">${(g.sec_A / 60).toFixed(1)} min</div><div class="val-sub">${(100 * g.sec_A / tot).toFixed(1)}%</div></td>
+          <td class="num"><div class="val-main">${(g.sec_D / 60).toFixed(1)} min</div><div class="val-sub">${(100 * g.sec_D / tot).toFixed(1)}%</div></td>
+        </tr>`;
+      html += m.submissions.map(s => `
+        <tr class="${s.name === selectedModel ? 'selected-row' : ''}" data-pick="${s.name}" style="cursor:pointer">
+          <td><div class="val-main">#${s.rank} · ${s.name}${tagOf(s.name, s.is_baseline)}</div></td>
+          <td class="num"><div class="val-main">${fmt1(s.spell_f1_mean)}</div><div class="val-sub">IoU 50%: ${fmt1(s.spell_f1_iou50)}</div></td>
+          <td class="num"><div class="val-main">${fmt1(s.macro_f1)}</div><div class="val-sub">F1 D: ${fmt1(s.f1_D)}</div></td>
+          <td><div class="val-main">${s.accuracy_pct.toFixed(1)}% <span class="diff-pill ${s.accuracy_pct >= 92 ? 'diff-good' : (s.accuracy_pct >= 85 ? 'diff-warn' : 'diff-bad')}">errore ${(s.err_s / 60).toFixed(1)} min</span></div>
+              <div class="val-sub">Squadra: ${(s.err_swap_ha_s / 60).toFixed(1)} min · Fermo: ${(s.err_dead_alive_s / 60).toFixed(1)} min</div></td>
+          <td><div class="val-main">${s.n_spells} azioni ${diffBadgeInt(s.n_spells - g.n_spells, Math.round(0.05 * g.n_spells), Math.round(0.2 * g.n_spells))}</div>
+              <div class="val-sub">Centrate ${s.spells_matched_50}/${g.n_spells} · media ${s.mean_dur_s.toFixed(1)}s (${signedSec(s.mean_dur_s - g.mean_dur_s)})</div></td>
+          <td><div class="val-main">${s.n_trans} cambi ${diffBadgeInt(s.n_trans - g.n_trans, Math.round(0.05 * g.n_trans), Math.round(0.2 * g.n_trans))}</div>
+              <div class="val-sub">Presi ${s.trans_matched_1s}/${g.n_trans} · extra ${s.trans_spurious_1s}</div></td>
+          <td class="num"><div class="val-main">${(s.sec_H / 60).toFixed(1)} min ${diffBadgeMin((s.sec_H - g.sec_H) / 60, 1, 4)}</div><div class="val-sub">${(100 * s.sec_H / tot).toFixed(1)}%</div></td>
+          <td class="num"><div class="val-main">${(s.sec_A / 60).toFixed(1)} min ${diffBadgeMin((s.sec_A - g.sec_A) / 60, 1, 4)}</div><div class="val-sub">${(100 * s.sec_A / tot).toFixed(1)}%</div></td>
+          <td class="num"><div class="val-main">${(s.sec_D / 60).toFixed(1)} min ${diffBadgeMin((s.sec_D - g.sec_D) / 60, 1, 4)}</div><div class="val-sub">${(100 * s.sec_D / tot).toFixed(1)}%</div></td>
+        </tr>`).join("");
+      const tbody = document.querySelector("#tableMatch tbody");
+      tbody.innerHTML = html;
+      tbody.querySelectorAll("tr[data-pick]").forEach(r => r.addEventListener("click", () => {
+        selectedModel = r.getAttribute("data-pick"); renderAll();
+      }));
+    }
+
+    function renderAll() {
+      if (!DATA || !DATA.matches.length) return;
+      renderSummary();
+      renderGrid();
+      renderToggles();
+      drawTimeline();
+      renderMatchTable();
+    }
+
+    function setupInteractions() {
+      const canvas = document.getElementById("timelineCanvas");
+      const tooltip = document.getElementById("tooltip");
+      let dragging = false, dragStartX = 0, dragStartView = [0, 0];
+
+      function clampView(ns, ne) {
+        const n = M().n_frames;
+        const span = Math.max(50, Math.min(n, ne - ns));
+        if (ns < 0) { ns = 0; ne = span; }
+        if (ne > n) { ne = n; ns = ne - span; }
+        viewStart = ns; viewEnd = ne;
+      }
+      function zoomBy(factor, anchorRatio = 0.5) {
+        const span = viewEnd - viewStart, anchor = viewStart + anchorRatio * span, ns = span * factor;
+        clampView(anchor - anchorRatio * ns, anchor + (1 - anchorRatio) * ns);
+        drawTimeline();
+      }
+      canvas.addEventListener("wheel", e => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const plotW = Math.max(100, rect.width - LABEL_COL_W - RIGHT_PAD);
+        zoomBy(e.deltaY < 0 ? 0.75 : 1.33, Math.max(0, Math.min(1, (e.clientX - rect.left - LABEL_COL_W) / plotW)));
+      }, { passive: false });
+      canvas.addEventListener("mousedown", e => { dragging = true; dragStartX = e.clientX; dragStartView = [viewStart, viewEnd]; });
+      window.addEventListener("mouseup", () => { dragging = false; });
+      window.addEventListener("mousemove", e => {
+        if (!DATA) return;
+        const rect = canvas.getBoundingClientRect();
+        const plotW = Math.max(100, rect.width - LABEL_COL_W - RIGHT_PAD);
+        if (dragging) {
+          const shift = -((e.clientX - dragStartX) / plotW) * (dragStartView[1] - dragStartView[0]);
+          clampView(dragStartView[0] + shift, dragStartView[1] + shift);
+          drawTimeline();
+        }
+        const inX = e.clientX >= rect.left + LABEL_COL_W && e.clientX <= rect.right - RIGHT_PAD;
+        const inY = e.clientY >= rect.top && e.clientY <= rect.bottom;
+        if (!inX || !inY) { tooltip.style.display = "none"; return; }
+        const m = M();
+        const frame = Math.max(0, Math.min(m.n_frames - 1, Math.floor(viewStart + ((e.clientX - rect.left - LABEL_COL_W) / plotW) * (viewEnd - viewStart))));
+        const gtCode = codeAtFrame(m.gt_rle, frame);
+        let html = `<div class="tt-title">${formatMatchClock(frame)} · Frame ${frame}</div>`;
+        html += `<div class="tt-row"><span><b>Soluzione Vera:</b></span><span class="pill pill-${CODE_NAMES[gtCode]}">${CODE_LABELS_IT[gtCode]}</span></div>`;
+        m.submissions.filter(s => visibleModels.has(s.name)).forEach(s => {
+          const c = codeAtFrame(s.rle, frame);
+          const mark = gtCode === 3 ? "" : (c === gtCode ? ` <span style="color:#15803d;font-weight:700">✓</span>` : ` <span style="color:#dc2626;font-weight:700">✗</span>`);
+          html += `<div class="tt-row"><span>${s.name}:</span><span><span class="pill pill-${CODE_NAMES[c]}">${CODE_NAMES[c]}</span>${mark}</span></div>`;
+        });
+        tooltip.innerHTML = html;
+        tooltip.style.display = "block";
+        tooltip.style.left = Math.min(window.innerWidth - 265, e.clientX + 16) + "px";
+        tooltip.style.top = Math.min(window.innerHeight - 220, e.clientY + 16) + "px";
+      });
+      document.getElementById("btnZoomIn").addEventListener("click", () => zoomBy(0.65));
+      document.getElementById("btnZoomOut").addEventListener("click", () => zoomBy(1.5));
+      document.getElementById("btnResetZoom").addEventListener("click", () => setPreset(currentPreset));
+      document.getElementById("btnPresetStart").addEventListener("click", () => setPreset("start"));
+      document.getElementById("btnPresetH1").addEventListener("click", () => setPreset("h1"));
+      document.getElementById("btnPresetH2").addEventListener("click", () => setPreset("h2"));
+      document.getElementById("btnPresetAll").addEventListener("click", () => setPreset("all"));
+      window.addEventListener("resize", () => drawTimeline());
+    }
+
+    setupInteractions();
+    loadData();
+  </script>
+</body>
+</html>
