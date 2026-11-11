@@ -37,19 +37,22 @@ import dati  # noqa: E402
 import esperimento as E  # noqa: E402
 import modello as M  # noqa: E402
 
+from constants import (  # noqa: E402
+    MODEL_NAME as NAME,
+    SEED,
+    N_NETS,
+    TV_WEIGHT,
+    VITERBI_PARAMS_FROZEN as START,
+    DM_SOURCES as DM,
+    LETTERS,
+    DECIMALS,
+)
+
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
 FROZEN = os.path.join(HERE, 'congelato')
-NAME = 'mv_hgb_rete3'                       # il nome del riferimento nella dashboard
 RESULTS = os.path.join(ROOT, 'evaluation', 'results')
 EXT_RESULTS = os.path.join(dati.C.fc.DATA_DIR, 'risultati_esterne')
 PUBLIC_GT = os.path.join(ROOT, 'evaluation', 'gt', 'BAR-ATH_possession_gt_public.csv')
-SEED = 2027
-N_NETS = 3                                  # semi della rete: SEED + 1000 * s (+ gruppo, nella validazione)
-TV_WEIGHT = 0.25                            # peso dei frame SkillCorner
-START = dict(turn=9, stop=13, rest=9, m_pos=5, m_dead=60, bias_d=-0.5)   # da qui parte la regolazione del Viterbi
-DM = ('dfl', 'metrica')                     # le partite su cui si giudica e si regola il Viterbi
-LETTERS = np.array(['H', 'A', 'D', 'X'])
-DECIMALS = 4                                # probabilità arrotondate: stessi risultati anche su processori diversi
 
 
 def _sha256(path, text=False):

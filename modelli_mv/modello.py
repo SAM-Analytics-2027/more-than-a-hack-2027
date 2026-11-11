@@ -15,9 +15,9 @@ from numba import njit
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 sys.path.insert(0, os.path.join(ROOT, 'evaluation'))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import possession_metrics as pm  # noqa: E402
-
-H, A, D, X = 0, 1, 2, 3
+from constants import H, A, D, X, INF_COST as INF, PROB_CLIP_MIN, EVENT_PROB_CLIP_MIN  # noqa: E402
 
 
 # --------------------------------------------------------------------------------------------------
@@ -106,7 +106,7 @@ def penalties(T, params, events=None):
     rest = np.full(T, float(params['rest']))
     if events is not None and params.get('w_ev', 0) > 0:
         w = float(params['w_ev'])
-        e = np.clip(events, 1e-3, 1.0)
+        e = np.clip(events, EVENT_PROB_CLIP_MIN, 1.0)
         turn = turn + w * (-np.log(e[:, 1]))
         stop = stop + w * (-np.log(e[:, 2]))
         rest = rest + w * (-np.log(e[:, 3]))
@@ -124,7 +124,7 @@ def decode(proba, period, no_data, params, events=None):
     params: turn, stop, rest (costi dei cambi), m_pos, m_dead (durate minime in frame), bias_d (spinta verso D),
     w_ev (peso degli eventi, se ci sono), m_pre e pen_pre (regola prima delle pause).
     """
-    p = np.clip(proba, 1e-4, 1.0)
+    p = np.clip(proba, PROB_CLIP_MIN, 1.0)
     cost = -np.log(p)
     cost[:, D] += params.get('bias_d', 0.0)
     cost[no_data] = 0.0

@@ -18,8 +18,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dati  # noqa: E402
 import esperimento as E  # noqa: E402
-
-DM = ('dfl', 'metrica')
+from constants import DM_SOURCES as DM  # noqa: E402
 
 
 def score_candidate(oof, meta, items, start=None):

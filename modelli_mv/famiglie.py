@@ -29,10 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import caratteristiche as C  # noqa: E402
 import dati  # noqa: E402
 import esperimento as E  # noqa: E402
-
-TV_WEIGHT = 0.25
-SEED = 2027
-THREADS = 8
+from constants import TV_WEIGHT, SEED, THREADS, XGB_PARAMS, LGBM_PARAMS  # noqa: E402
 
 
 # --------------------------------------------------------------------------------------------------
@@ -87,9 +84,7 @@ def sym_predict(predict, df, cols):
 
 def fit_xgb(Xtr, ytr, wtr, Xva, yva, wva):
     import xgboost as xgb
-    params = dict(objective='multi:softprob', num_class=3, tree_method='hist', max_depth=8, eta=0.06,
-                  subsample=0.8, colsample_bytree=0.7, min_child_weight=50, reg_lambda=2.0,
-                  eval_metric='mlogloss', nthread=THREADS, seed=SEED)
+    params = dict(XGB_PARAMS)
     dtr = xgb.DMatrix(Xtr.values, label=ytr, weight=wtr)
     dva = xgb.DMatrix(Xva.values, label=yva, weight=wva)
     booster = xgb.train(params, dtr, num_boost_round=2000, evals=[(dva, 'val')],
@@ -100,9 +95,7 @@ def fit_xgb(Xtr, ytr, wtr, Xva, yva, wva):
 
 def fit_lgbm(Xtr, ytr, wtr, Xva, yva, wva, objective='multiclass', n_class=3):
     import lightgbm as lgb
-    params = dict(objective=objective, learning_rate=0.05, num_leaves=63, min_data_in_leaf=200,
-                  feature_fraction=0.7, bagging_fraction=0.8, bagging_freq=1, lambda_l2=2.0,
-                  num_threads=THREADS, seed=SEED, verbose=-1)
+    params = dict(LGBM_PARAMS, objective=objective)
     if objective == 'multiclass':
         params['num_class'] = n_class
     dtr = lgb.Dataset(Xtr.values, label=ytr, weight=wtr, free_raw_data=True)

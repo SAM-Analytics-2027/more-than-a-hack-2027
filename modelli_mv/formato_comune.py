@@ -30,13 +30,8 @@ import numpy as np
 # La cartella data/ della repo (quella con tactical/ e altre_partite/); si può cambiare con MTAH_DATA_DIR
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 DATA_DIR = os.environ.get('MTAH_DATA_DIR') or os.path.join(ROOT, 'data')
-FPS = 25
-HOME, AWAY = 0, 1
 
-# Barça–Athletic: costanti della repo ufficiale (games.py e DATA.md)
-OUR_FRAMES = 199319
-OUR_LENGTH, OUR_WIDTH = 105.3, 68.0
-OUR_HALVES = ((1, 11185, 90651), (2, 110808, 190197))  # frame valutati, estremi inclusi
+from constants import FPS, HOME, AWAY, OUR_FRAMES, OUR_LENGTH, OUR_WIDTH, OUR_HALVES
 
 
 def _only(folder, pattern):

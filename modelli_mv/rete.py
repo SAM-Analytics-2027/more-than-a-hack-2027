@@ -21,11 +21,12 @@ import torch.nn as nn
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import caratteristiche as C  # noqa: E402
 import esperimento as E  # noqa: E402
+import constants as K  # noqa: E402
 
-STRIDE = 5        # 5 frame al secondo: la rete guarda la sequenza a 0,2 s di passo
-CROP = 300        # tratti di 60 s per allenare
-EPOCHS = int(os.environ.get('MV_EPOCHS', 20))
-TV_WEIGHT = 0.25  # peso dei frame SkillCorner
+STRIDE = K.STRIDE        # 5 frame al secondo: la rete guarda la sequenza a 0,2 s di passo
+CROP = K.CROP            # tratti di 60 s per allenare
+EPOCHS = int(os.environ.get('MV_EPOCHS', K.EPOCHS))
+TV_WEIGHT = K.TV_WEIGHT  # peso dei frame SkillCorner
 
 
 def device():
@@ -46,7 +47,7 @@ class Block(nn.Module):
         self.conv = nn.Conv1d(c, c, 3, padding=d, dilation=d)
         self.norm = nn.BatchNorm1d(c)
         self.act = nn.GELU()
-        self.drop = nn.Dropout(0.15)
+        self.drop = nn.Dropout(K.DROPOUT)
 
     def forward(self, x):
         return x + self.drop(self.act(self.norm(self.conv(x))))
@@ -54,10 +55,10 @@ class Block(nn.Module):
 
 class Net(nn.Module):
     """Rete convoluzionale non causale: ogni momento vede ±127 passi (±25 s) intorno a sé."""
-    def __init__(self, n_in, c=96):
+    def __init__(self, n_in, c=K.CHANNELS):
         super().__init__()
         self.inp = nn.Conv1d(n_in, c, 1)
-        self.blocks = nn.Sequential(*[Block(c, d) for d in (1, 2, 4, 8, 16, 32, 64)])
+        self.blocks = nn.Sequential(*[Block(c, d) for d in K.DILATIONS])
         self.out = nn.Conv1d(c, 3, 1)
 
     def forward(self, x):
@@ -96,7 +97,7 @@ def _seqs(df, it, cols, med, iqr, swap=False):
     for xo, xs, y, ys, w, sel in _raw(df, it, cols):
         x = ((xs if swap else xo) - med) / iqr
         miss = np.isnan(x)
-        x = np.clip(np.nan_to_num(x, nan=0.0), -6, 6)
+        x = np.clip(np.nan_to_num(x, nan=0.0), *K.NET_FEATURE_CLIP)
         x = np.concatenate([x, miss.astype(np.float32)], axis=1).astype(np.float32)
         out.append((x, ys if swap else y, w, sel))
     return out
@@ -106,7 +107,7 @@ def train(data, items, cols, seed, dev=None):
     """Allena la rete sulle partite `items`. Restituisce {'net', 'med', 'iqr', 'cols', 'seed', 'per_epoch'}."""
     torch.manual_seed(seed)
     dev = dev or device()
-    allX = np.concatenate([data[it][cols].values[::40] for it in items])
+    allX = np.concatenate([data[it][cols].values[::K.NORM_SUBSAMPLE_STEP] for it in items])
     med = np.nanmedian(allX, axis=0)
     iqr = np.nanpercentile(allX, 75, axis=0) - np.nanpercentile(allX, 25, axis=0)
     iqr = np.where(np.isfinite(iqr) & (iqr > 1e-6), iqr, 1.0)
@@ -116,18 +117,18 @@ def train(data, items, cols, seed, dev=None):
         seqs += _seqs(data[it], it, cols, med, iqr) + _seqs(data[it], it, cols, med, iqr, swap=True)
 
     net = Net(seqs[0][0].shape[1]).to(dev)
-    opt = torch.optim.AdamW(net.parameters(), lr=2e-3, weight_decay=1e-4)
+    opt = torch.optim.AdamW(net.parameters(), lr=K.LR, weight_decay=K.WEIGHT_DECAY)
     lens = np.array([len(q[0]) for q in seqs], dtype=float)
-    per_epoch = max(1, int(lens.sum()) // (CROP * 32))
+    per_epoch = max(1, int(lens.sum()) // (CROP * K.BATCH_SIZE))
     if os.environ.get('MV_SMOKE'):
         per_epoch = 3
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=2e-3, total_steps=EPOCHS * per_epoch)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=K.LR, total_steps=EPOCHS * per_epoch)
     rng = np.random.default_rng(seed)
     for _ in range(EPOCHS):
         net.train()
         for _ in range(per_epoch):
             xb, yb, wb = [], [], []
-            for si in rng.choice(len(seqs), size=32, p=lens / lens.sum()):
+            for si in rng.choice(len(seqs), size=K.BATCH_SIZE, p=lens / lens.sum()):
                 x, y, w, _ = seqs[si]
                 a = rng.integers(0, len(x) - CROP + 1)
                 xb.append(x[a:a + CROP])
@@ -142,7 +143,7 @@ def train(data, items, cols, seed, dev=None):
             loss = (loss * valid.reshape(-1)).sum() / valid.sum().clamp(min=1.0)
             opt.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(net.parameters(), 1.0)
+            nn.utils.clip_grad_norm_(net.parameters(), K.GRAD_CLIP)
             opt.step()
             sched.step()
     net.eval()

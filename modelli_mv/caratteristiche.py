@@ -20,13 +20,12 @@ import pandas as pd
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import formato_comune as fc  # noqa: E402  (modelli_mv/formato_comune.py)
-
-FPS = 25
-SPEED_HALF = 2           # velocità su ±2 frame (0,16 s)
-WALK = 2.0               # m/s: sotto questa velocità un giocatore "cammina"
-NEAR = 3.0               # m: giocatori "vicini" alla palla
-TOUCH = 1.8              # m: palla "toccata" (la palla sporcata è spostata di circa 0,8 m)
-WINDOWS = (12, 37, 112)  # mezze finestre: ±0,5 s, ±1,5 s, ±4,5 s
+from constants import (  # noqa: E402
+    FPS, SPEED_HALF, WALK, NEAR, TOUCH, WINDOWS,
+    ASYMMETRIC_WINDOWS, TOUCH_COUNT_WINDOWS,
+    GAP_CLIP_FRAMES, NO_BALL_INITIAL_OFFSET, MAX_STREAK,
+    FIELD_BOUND_TOLERANCE, PERCENTILE_VELOCITY,
+)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -88,10 +87,10 @@ def _gap_position(visible, segs):
         idx = np.arange(n)
         last = np.maximum.accumulate(np.where(v, idx, -1))
         nxt = np.minimum.accumulate(np.where(v, idx, n)[::-1])[::-1]
-        s = np.where(last >= 0, idx - last, idx + 1 + 250).astype(np.float32)   # senza palla dall'inizio
-        u = np.where(nxt < n, nxt - idx, n - idx + 250).astype(np.float32)
-        since[a:b] = np.minimum(s, 1500)
-        until[a:b] = np.minimum(u, 1500)
+        s = np.where(last >= 0, idx - last, idx + 1 + NO_BALL_INITIAL_OFFSET).astype(np.float32)   # senza palla dall'inizio
+        u = np.where(nxt < n, nxt - idx, n - idx + NO_BALL_INITIAL_OFFSET).astype(np.float32)
+        since[a:b] = np.minimum(s, GAP_CLIP_FRAMES)
+        until[a:b] = np.minimum(u, GAP_CLIP_FRAMES)
     return since, until
 
 
@@ -121,9 +120,9 @@ def _last_next(touch, segs):
         ni = np.minimum.accumulate(np.where(v != 0, idx, n)[::-1])[::-1]
         okl, okn = li >= 0, ni < n
         last[a:b] = np.where(okl, v[np.maximum(li, 0)], np.nan)
-        since[a:b] = np.where(okl, np.minimum(idx - li, 1500), np.nan)
+        since[a:b] = np.where(okl, np.minimum(idx - li, GAP_CLIP_FRAMES), np.nan)
         nxt[a:b] = np.where(okn, v[np.minimum(ni, n - 1)], np.nan)
-        until[a:b] = np.where(okn, np.minimum(ni - idx, 1500), np.nan)
+        until[a:b] = np.where(okn, np.minimum(ni - idx, GAP_CLIP_FRAMES), np.nan)
     return last, since, nxt, until
 
 
@@ -148,7 +147,7 @@ def _streak(touch, segs):
             elif prev != 0:
                 prev = 0.0
             out[a + i] = cur * count
-    return np.clip(out, -20, 20)
+    return np.clip(out, -MAX_STREAK, MAX_STREAK)
 
 
 def _nanmin_rows(a):
@@ -224,7 +223,7 @@ def features(match):
     f['by_abs'] = np.abs(by)
     f['dist_linea_fondo'] = L / 2 - np.abs(bx)
     f['dist_linea_lato'] = W / 2 - np.abs(by)
-    f['palla_fuori'] = np.where(vis, ((np.abs(bx) > L / 2 + 0.5) | (np.abs(by) > W / 2 + 0.5)).astype(np.float32), np.nan)
+    f['palla_fuori'] = np.where(vis, ((np.abs(bx) > L / 2 + FIELD_BOUND_TOLERANCE) | (np.abs(by) > W / 2 + FIELD_BOUND_TOLERANCE)).astype(np.float32), np.nan)
     bvx, bvy = _speed(bx, period), _speed(by, period)
     bspeed = np.hypot(bvx, bvy)
     f['palla_vel'] = bspeed
@@ -248,7 +247,7 @@ def features(match):
     f['vel_max'] = np.nanmax(np.where(np.isnan(sp), -1, sp), axis=1)
     f['vel_max'][f['vel_max'] < 0] = np.nan
     f['quota_cammina'] = np.nanmean(np.where(np.isnan(sp), np.nan, (sp < WALK).astype(np.float32)), axis=1)
-    f['vel_p90'] = np.nanpercentile(sp, 90, axis=1).astype(np.float32)
+    f['vel_p90'] = np.nanpercentile(sp, PERCENTILE_VELOCITY, axis=1).astype(np.float32)
 
     for name, m in (('casa', H), ('ospiti', A)):
         x, y = px[:, m], py[:, m]
@@ -315,7 +314,7 @@ def features(match):
     starts = np.zeros(T, dtype=np.float32)            # inizio di una serie di tocchi (un passaggio ricevuto)
     starts[1:] = (touch[1:] != 0) & (touch[1:] != touch[:-1])
     starts[0] = touch[0] != 0
-    for w in (50, 125):
+    for w in TOUCH_COUNT_WINDOWS:
         f['tocchi_casa_p{}'.format(w)] = _window_sum(starts * (touch > 0), segs, w, 0)
         f['tocchi_ospiti_p{}'.format(w)] = _window_sum(starts * (touch < 0), segs, w, 0)
         f['tocchi_casa_f{}'.format(w)] = _window_sum(starts * (touch > 0), segs, 0, w)
@@ -336,7 +335,7 @@ def features(match):
         for w in WINDOWS:
             f['{}_c{}'.format(name, w)] = _window_mean(v, segs, w, w)
     for name in ('d_diff', 'vicino_casa', 'palla_vista', 'vel_media', 'palla_vel', 'bx', 'vx_diff'):
-        for w in (25, 75):
+        for w in ASYMMETRIC_WINDOWS:
             f['{}_p{}'.format(name, w)] = _window_mean(base[name], segs, w, -1)
             f['{}_f{}'.format(name, w)] = _window_mean(base[name], segs, -1, w)
     for k in list(f):

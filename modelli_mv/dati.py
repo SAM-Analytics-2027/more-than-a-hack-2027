@@ -22,20 +22,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import caratteristiche as C  # noqa: E402
 
+from constants import VERSION, SOURCES, CODE, BARCA, MATCHES  # noqa: E402
+
 BASE = os.path.join(C.fc.DATA_DIR, 'altre_partite')
 CACHE = os.path.join(C.fc.DATA_DIR, 'cache_mv')
-VERSION = 'v2'          # cambia quando cambiano le caratteristiche: v1 senza i tocchi
-SOURCES = ('dfl', 'metrica', 'skillcorner')
-CODE = {'H': 0, 'A': 1, 'D': 2, 'X': 3}
-BARCA = ('barca', 'BAR-ATH')
-
-MATCHES = {
-    'dfl': ['J03WMX', 'J03WN1', 'J03WOH', 'J03WOY', 'J03WPY', 'J03WQQ', 'J03WR9'],
-    'metrica': ['Sample_Game_1', 'Sample_Game_2', 'Sample_Game_3'],
-    'skillcorner': ['1874553', '1886347', '1899585', '1925299', '1927964', '1953632', '1959846', '1986691',
-                    '1996435', '1996436', '2006229', '2006363', '2007448', '2007721', '2010085', '2011166',
-                    '2013725', '2015213', '2016236', '2017461'],
-}
 
 _CODE_HASH = None
 
