@@ -1,0 +1,13 @@
+{
+ "params": {
+  "turn": 9,
+  "stop": 4,
+  "rest": 9,
+  "m_pos": 5,
+  "m_dead": 60,
+  "bias_d": -0.5
+ },
+ "annidato": 0.7401,
+ "origine": "Viterbi regolato (ricerca per coordinate, 2 giri, partendo da START di riproduci.py) sulle probabilit\u00e0 fuori gruppo delle 10 partite DFL + Metrica; annidato = spellF1 medio con i parametri regolati senza il gruppo giudicato",
+ "unita": "turn/stop/rest: costi dei cambi; m_pos/m_dead: durate minime in frame (25 al secondo); bias_d: spinta verso D"
+}
