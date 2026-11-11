@@ -22,8 +22,7 @@ import caratteristiche as C  # noqa: E402
 import dati  # noqa: E402
 import esperimento as E  # noqa: E402
 import modello as M  # noqa: E402
-
-LETTERS = np.array(['H', 'A', 'D', 'X'])
+from constants import LETTERS  # noqa: E402
 
 
 def fit_all(cols, data, events=False):

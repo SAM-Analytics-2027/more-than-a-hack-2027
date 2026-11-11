@@ -21,11 +21,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dati  # noqa: E402
+from constants import REACH, PASS_SPEED, MIN_CTRL_S, MAX_PROBE_S  # noqa: E402
 
-REACH = 1.60          # m
-PASS_SPEED = 16.0     # m/s
-MIN_CTRL_S = 0.24     # s
-MAX_PROBE_S = 1.60    # s
 OUT_DIR = os.path.join(dati.CACHE, 'etichette_senza_rimbalzi')
 
 

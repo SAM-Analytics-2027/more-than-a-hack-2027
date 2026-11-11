@@ -24,11 +24,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import caratteristiche as C  # noqa: E402
 import dati  # noqa: E402
 import modello as M  # noqa: E402
-
-N_FOLDS = 5
-STEP = 8          # in allenamento si prende un frame ogni 8 (0,32 s): i frame vicini sono quasi uguali
-SEED = 2027
-META = ('frame', 'period', 'y')
+from constants import (  # noqa: E402
+    N_FOLDS, STEP, SEED, META,
+    SHORT_SPELL_WEIGHT_MIN, SHORT_SPELL_WEIGHT_MAX,
+    EV_HALF, EVENT_SUBSAMPLE_POS, EVENT_SUBSAMPLE_NEG,
+    EVENT_WEIGHT_POS, EVENT_WEIGHT_NEG,
+    HGB_PARAMS, DEFAULT, GRID, LETTERS,
+)
 
 
 def folds(items):
@@ -67,7 +69,7 @@ def short_spell_weights(y, period):
     if spells:
         med = np.median([b - a for a, b in spells])
         for a, b in spells:
-            w[a:b] = np.clip(np.sqrt(med / (b - a)), 1 / 3, 3)
+            w[a:b] = np.clip(np.sqrt(med / (b - a)), SHORT_SPELL_WEIGHT_MIN, SHORT_SPELL_WEIGHT_MAX)
     return w
 
 
@@ -92,10 +94,7 @@ def training_rows(df, cols, swap=True):
 
 
 def make_model():
-    return HistGradientBoostingClassifier(
-        max_iter=500, learning_rate=0.08, max_leaf_nodes=63, min_samples_leaf=200,
-        l2_regularization=1.0, early_stopping=True, validation_fraction=0.1, n_iter_no_change=25,
-        random_state=SEED)
+    return HistGradientBoostingClassifier(**HGB_PARAMS)
 
 
 def predict_sym(model, df, cols):
@@ -144,9 +143,6 @@ def train(name, train_sources, flag=False):
     print('salvate', path)
 
 
-EV_HALF = 5        # un evento "vale" per ±5 frame (0,2 s) intorno al frame in cui cambia l'etichetta
-
-
 def event_labels(y):
     """0 niente, 1 cambio squadra, 2 inizio pausa, 3 ripresa, intorno a ogni cambio dell'etichetta vera."""
     codes = M.to_codes(y)
@@ -178,10 +174,10 @@ def train_events(name):
             y = df['y'].values
             ev = event_labels(y)
             ok = (y < 3) & (df['period'].values > 0)
-            idx_ev = np.flatnonzero(ok & (ev > 0))[::2]
-            idx_no = np.flatnonzero(ok & (ev == 0))[::16]
+            idx_ev = np.flatnonzero(ok & (ev > 0))[::EVENT_SUBSAMPLE_POS]
+            idx_no = np.flatnonzero(ok & (ev == 0))[::EVENT_SUBSAMPLE_NEG]
             idx = np.concatenate([idx_ev, idx_no])
-            w = np.concatenate([np.full(len(idx_ev), 2.0), np.full(len(idx_no), 16.0)])
+            w = np.concatenate([np.full(len(idx_ev), EVENT_WEIGHT_POS), np.full(len(idx_no), EVENT_WEIGHT_NEG)])
             X = df[cols].iloc[idx]
             Xs += [X, C.swap_teams(X)[cols]]
             ys += [ev[idx], ev[idx]]
@@ -201,17 +197,6 @@ def train_events(name):
 def load_oof(name):
     z = np.load(os.path.join(dati.CACHE, 'oof_{}.npz'.format(name)))
     return {tuple(k.split('__')): z[k] for k in z.files}
-
-
-DEFAULT = dict(turn=6.0, stop=6.0, rest=6.0, m_pos=20, m_dead=40, bias_d=0.0)
-GRID = {
-    'turn': [2, 4, 6, 9, 13, 18, 25, 35],
-    'stop': [2, 4, 6, 9, 13, 18, 25],
-    'rest': [2, 4, 6, 9, 13, 18, 25],
-    'm_pos': [5, 10, 15, 20, 30, 40, 55, 75],
-    'm_dead': [10, 20, 30, 40, 60, 85],
-    'bias_d': [-1.0, -0.5, -0.25, 0.0, 0.25, 0.5, 1.0],
-}
 
 
 def evaluate(oof, data_meta, params, items):
@@ -303,7 +288,6 @@ def nested_report(name, ev_name=None):
 
 
 EXT_RESULTS = os.path.join(C.fc.DATA_DIR, 'risultati_esterne')
-LETTERS = np.array(['H', 'A', 'D', 'X'])
 
 
 def _write_labels(path, codes):
