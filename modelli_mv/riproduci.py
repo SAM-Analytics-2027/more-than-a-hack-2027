@@ -6,11 +6,15 @@
                                                               congelati, per la seconda pagina della dashboard (5 min)
     python modelli_mv/riproduci.py allena --nome NOME         rifà tutto da capo con il codice di oggi: 5 gruppi
                                                               di validazione, parametri del Viterbi, modello finale
-                                                              (circa 1 ora su Mac); i risultati vanno in dashboard
+                                                              (circa 1 ora su Mac); i pesi vanno in
+                                                              data/cache_mv/modelli/NOME e i risultati in dashboard
                                                               come NOME, accanto al riferimento
+    python modelli_mv/riproduci.py prevedi --modello NOME     come prevedi ed esterne, ma con i pesi della prova NOME
+    python modelli_mv/riproduci.py esterne --modello NOME     (per rifare identica la prova di un compagno)
 
 Il riferimento sta in modelli_mv/congelato/: pesi dei modelli, parametri del Viterbi e impronte SHA-256 di tutti i
-risultati attesi. "prevedi" ed "esterne" dicono se quello che esce è IDENTICO al riferimento.
+risultati attesi. Ogni prova ha lo stesso, in data/cache_mv/modelli/NOME/. "prevedi" ed "esterne" dicono se quello
+che esce è IDENTICO a quello atteso per quei pesi.
 Né i CSV né i dati vanno su GitHub: solo codice, pesi e impronte.
 """
 import argparse
@@ -132,6 +136,7 @@ def fit_components(data, items, cols, folder, net_seeds):
     import joblib
     import famiglie
     import rete
+    famiglie.TV_WEIGHT = rete.TV_WEIGHT = TV_WEIGHT  # la ricetta si decide qui, in un posto solo
     os.makedirs(folder, exist_ok=True)
     t = time.time()
     X, y, w = famiglie.rows(data, items, cols)       # 1 frame ogni 8, squadre scambiate, pesi (SkillCorner 1/4)
@@ -196,7 +201,7 @@ def _public_window(codes):
     return {'spellF1': round(float(r['spell_f1_mean']), 4), 'macroF1': round(float(r['macro_f1']), 4)}
 
 
-def predict(root=FROZEN, name=NAME, freeze=False):
+def predict(root=FROZEN, name=NAME, write=False):
     t = time.time()
     for f in dati.input_files(dati.BARCA):
         if not os.path.exists(os.path.join(dati.C.fc.DATA_DIR, f)):
@@ -217,7 +222,7 @@ def predict(root=FROZEN, name=NAME, freeze=False):
     print('   possessi {}  conteggi {}'.format(got['possessi'], got['conteggi']))
     print('   5 minuti pubblici (prima pagina della dashboard): spellF1 {spellF1}  macroF1 {macroF1}'.format(
         **got['finestra_pubblica']))
-    _compare('attesi.json', got, freeze, root, ('possessi', 'conteggi', 'finestra_pubblica'))
+    _compare('attesi.json', got, write, root, ('possessi', 'conteggi', 'finestra_pubblica'))
     return got
 
 
@@ -255,7 +260,7 @@ def _scores(oof, data, params):
     return {it: _score(data[it], _decode(oof[it], data[it], params)) for it in sorted(oof)}
 
 
-def external(root=FROZEN, name=NAME, freeze=False, oof=None):
+def external(root=FROZEN, name=NAME, write=False, oof=None):
     t = time.time()
     dati.build_all()
     data = E.add_source_flag(dati.load_all())
@@ -275,27 +280,33 @@ def external(root=FROZEN, name=NAME, freeze=False, oof=None):
         os.path.join(EXT_RESULTS, name), ROOT), time.time() - t))
     print('   spellF1 medio sulle 10 DFL + Metrica: {}  (DFL {}, Metrica {}, peggiore {})  | SkillCorner {}'.format(
         got['media10'], by['dfl'], by['metrica'], got['peggiore10'], by['skillcorner']))
-    _compare('attesi_esterne.json', got, freeze, root, ('media10', 'per_fonte'))
+    _compare('attesi_esterne.json', got, write, root, ('media10', 'per_fonte', 'peggiore10'))
     return got
 
 
-def _compare(fname, got, freeze, root, keys):
-    path = os.path.join(FROZEN, fname)
-    if freeze:
+def _compare(fname, got, write, root, keys):
+    """Confronta con i risultati attesi di questi pesi (root/fname) e, per una prova, anche con il riferimento."""
+    path = os.path.join(root, fname)
+    is_reference = os.path.abspath(root) == os.path.abspath(FROZEN)
+    if write:
         json.dump(dict(got, ambiente=_versions()), open(path, 'w'), indent=1)
-        print('   {} aggiornato'.format(os.path.relpath(path, ROOT)))
-        return
-    if not os.path.exists(path):
-        return
-    exp = json.load(open(path))
-    if got['csv_sha256'] == exp['csv_sha256']:
-        print('   RISULTATO: IDENTICO al riferimento (stesse impronte SHA-256).')
-        return
-    print('   RISULTATO: diverso dal riferimento.')
-    for key in keys:
-        print('      {:18s} riferimento {}  ora {}'.format(key, exp[key], got[key]))
-    if os.path.abspath(root) == os.path.abspath(FROZEN):
-        print('   Con i pesi congelati deve venire identico: controlla versioni e dati con "controlla".')
+        print('   {} scritto'.format(os.path.relpath(path, ROOT)))
+    elif os.path.exists(path):
+        exp = json.load(open(path))
+        if got['csv_sha256'] == exp['csv_sha256']:
+            print('   RISULTATO: IDENTICO {} (stesse impronte SHA-256).'.format(
+                'al riferimento' if is_reference else 'a quello atteso per questi pesi'))
+        else:
+            print('   RISULTATO: diverso da quello atteso per questi pesi.')
+            for key in keys:
+                print('      {:18s} atteso {}  ora {}'.format(key, exp[key], got[key]))
+            print('   Con gli stessi pesi deve venire identico: controlla versioni e dati con "controlla".')
+    ref_path = os.path.join(FROZEN, fname)
+    if not is_reference and os.path.exists(ref_path):
+        ref = json.load(open(ref_path))
+        print('   confronto con il riferimento {}:'.format(NAME))
+        for key in keys:
+            print('      {:18s} riferimento {}  questa prova {}'.format(key, ref[key], got[key]))
 
 
 # --------------------------------------------------------------------------------------------------
@@ -309,9 +320,16 @@ def _tune(oof, data, items):
     return params
 
 
+def model_dir(name):
+    """Dove stanno i pesi di una prova: data/cache_mv/modelli/<nome> (il riferimento sta in modelli_mv/congelato)."""
+    return FROZEN if name == NAME else os.path.join(dati.CACHE, 'modelli', name)
+
+
 def train(name, freeze=False):
     import famiglie
-    root = FROZEN if freeze else os.path.join(dati.CACHE, 'modelli', name)
+    if name == NAME and not freeze:
+        sys.exit('{} è il nome del riferimento: scegli un altro nome per la prova'.format(NAME))
+    root = FROZEN if freeze else model_dir(name)
     if os.path.exists(os.path.join(root, 'gruppi')):
         shutil.rmtree(os.path.join(root, 'gruppi'))
     if os.path.exists(os.path.join(root, 'finale')):
@@ -348,8 +366,9 @@ def train(name, freeze=False):
     print('3. Modello finale per il Barça, allenato su tutte e 30 le partite')
     fit_components(data, items, cols, os.path.join(root, 'finale'), [SEED + 1000 * s for s in range(N_NETS)])
     print('4. Risultati ({:.0f} min)'.format((time.time() - t0) / 60))
-    external(root, name if not freeze else NAME, freeze, oof=oof)
-    predict(root, name if not freeze else NAME, freeze)
+    out_name = NAME if freeze else name
+    external(root, out_name, write=True, oof=oof)
+    predict(root, out_name, write=True)
 
 
 if __name__ == '__main__':
@@ -357,14 +376,17 @@ if __name__ == '__main__':
     ap.add_argument('cosa', choices=['controlla', 'prevedi', 'esterne', 'allena'])
     ap.add_argument('--solo-barca', action='store_true', help='controlla: solo i file della gara (basta per prevedi)')
     ap.add_argument('--nome', help='allena: nome della prova (cartella data/cache_mv/modelli/NOME e nome in dashboard)')
+    ap.add_argument('--modello', default=NAME,
+                    help='prevedi/esterne: i pesi di quale prova usare (di base il riferimento %(default)s)')
     ap.add_argument('--congela', action='store_true', help=argparse.SUPPRESS)   # solo per chi aggiorna il riferimento
     a = ap.parse_args()
     if a.cosa == 'controlla':
         sys.exit(0 if check(write=a.congela, only_barca=a.solo_barca) else 1)
-    elif a.cosa == 'prevedi':
-        predict()
-    elif a.cosa == 'esterne':
-        external(freeze=a.congela)
+    elif a.cosa in ('prevedi', 'esterne'):
+        root = model_dir(a.modello)
+        if not os.path.isdir(os.path.join(root, 'finale' if a.cosa == 'prevedi' else 'gruppi')):
+            sys.exit('non trovo i pesi di "{}" in {}'.format(a.modello, os.path.relpath(root, ROOT)))
+        (predict if a.cosa == 'prevedi' else external)(root, a.modello, write=a.congela)
     else:
         if not a.nome and not a.congela:
             sys.exit('serve un nome per la prova: --nome NOME (per esempio --nome ste_prova1)')
