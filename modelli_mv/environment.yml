@@ -1,0 +1,21 @@
+# Ambiente conda del modello mv_hgb_rete3 (cartella modelli_mv/), versioni esatte da conda-forge.
+# Va bene su Mac (Intel o Apple), Windows e Linux:
+#
+#   conda env create -f modelli_mv/environment.yml
+#   conda activate mtah
+#
+# Stesse versioni di requirements.txt (per chi usa pip invece di conda).
+name: mtah
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=2.4.6
+  - pandas=3.1.1
+  - pyarrow=26.0.1
+  - scikit-learn=1.9.1
+  - scipy=1.17.1
+  - joblib=1.6.0
+  - numba=0.68.1
+  - llvmlite=0.50.0
+  - pytorch=2.14.1

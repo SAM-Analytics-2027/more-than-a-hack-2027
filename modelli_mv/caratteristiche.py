@@ -1,6 +1,6 @@
 """Caratteristiche per frame, uguali per le partite esterne e per Barça–Athletic.
 
-Una partita (il dizionario di data/analisi/formato_comune.py) diventa una tabella con una riga per frame
+Una partita (il dizionario di modelli_mv/formato_comune.py) diventa una tabella con una riga per frame
 e circa 100 colonne. Tutto si calcola solo dal tracking, che è anonimo: posizioni dei giocatori con la
 squadra di ogni slot, e la palla quando si vede.
 
@@ -18,8 +18,8 @@ import numpy as np
 import pandas as pd
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-sys.path.insert(0, os.path.join(ROOT, 'data', 'analisi'))
-import formato_comune as fc  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import formato_comune as fc  # noqa: E402  (modelli_mv/formato_comune.py)
 
 FPS = 25
 SPEED_HALF = 2           # velocità su ±2 frame (0,16 s)
