@@ -62,3 +62,15 @@ __pycache__/
 venv/
 env/
 .DS_Store
+
+# -- heavy reproducible model artifacts ----------------------------------------------------------
+# Per-model artifacts live in models/<name>/artifacts/ . The leave-one-fold stage-1 models are
+# rebuilt by each model's eval script (>= 100 MB); only the final artifact and the decision
+# artifacts (decoder parameters, provenance) ship.
+models/*/artifacts/loo/
+artifacts/possession_arm_v1/loo/
+*.npz
+
+# -- transient pip working dirs (the slow wheels install creates them in the repo root) ---------
+pip-metadata-*/
+pip-unpack-*/
