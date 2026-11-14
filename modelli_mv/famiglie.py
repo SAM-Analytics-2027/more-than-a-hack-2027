@@ -44,14 +44,18 @@ def load():
 
 
 def rows(data, items, cols):
-    """Righe di allenamento (un frame ogni 8, più lo scambio delle squadre) con i pesi."""
+    """Righe di allenamento (un frame ogni 8 per DFL/Metrica, ogni 16 a peso 2*TV_WEIGHT per SkillCorner, più scambio squadre)."""
     E.WEIGHTS = True
     Xs, ys, ws = [], [], []
     for it in items:
         X, y, w = E.training_rows(data[it], cols)
+        if it[0] == 'skillcorner':
+            X = X.iloc[::2]
+            y = y[::2]
+            w = w[::2] * (2.0 * TV_WEIGHT)
         Xs.append(X)
         ys.append(y)
-        ws.append(w * (TV_WEIGHT if it[0] == 'skillcorner' else 1.0))
+        ws.append(w)
     return pd.concat(Xs, ignore_index=True), np.concatenate(ys), np.concatenate(ws)
 
 

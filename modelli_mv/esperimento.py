@@ -34,15 +34,16 @@ from constants import (  # noqa: E402
 
 
 def folds(items):
-    """Gruppi di partite intere, con le fonti distribuite in modo uniforme."""
+    """Gruppi di partite intere, con le fonti distribuite in modo uniforme (sempre sugli ID canonici delle 30 partite)."""
+    canon = sorted(dati.external_matches())
     out = {}
     for src in dati.SOURCES:
-        ids = [it for it in items if it[0] == src]
+        ids = [it for it in canon if it[0] == src]
         rng = np.random.default_rng(SEED)
         rng.shuffle(ids)
         for i, it in enumerate(ids):
             out[it] = i % N_FOLDS
-    return out
+    return {it: out[it] for it in items if it in out}
 
 
 def feature_cols(df):
@@ -202,8 +203,10 @@ def load_oof(name):
 def evaluate(oof, data_meta, params, items):
     out = {}
     for it in items:
-        y, per, nd, ev = data_meta[it]
-        pred = M.decode(oof[it], per, nd, params, ev)
+        m = data_meta[it]
+        y, per, nd, ev = m[:4]
+        d_min = m[4] if len(m) > 4 else None
+        pred = M.decode(oof[it], per, nd, params, ev, d_min=d_min)
         out[it] = M.score(y, pred)
     return out
 
@@ -219,10 +222,10 @@ def summary(scores):
 def tune(oof, data_meta, items, start=None, rounds=2):
     """Ricerca per coordinate: un parametro alla volta, il valore migliore, poi il giro successivo.
 
-    Obiettivo: media delle tre fonti (ogni fonte pesa uguale, non ogni partita).
+    Obiettivo: media delle partite (se solo DFL+Metrica) o delle fonti.
     """
     params = dict(start or DEFAULT)
-    best, _ = summary(evaluate(oof, data_meta, params, items))
+    best = float(np.mean(list(evaluate(oof, data_meta, params, items).values())))
     grid = dict(GRID)
     if any(data_meta[it][3] is not None for it in items):
         grid['w_ev'] = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
@@ -231,7 +234,7 @@ def tune(oof, data_meta, items, start=None, rounds=2):
         for key, values in grid.items():
             for v in values:
                 trial = dict(params, **{key: v})
-                s, _ = summary(evaluate(oof, data_meta, trial, items))
+                s = float(np.mean(list(evaluate(oof, data_meta, trial, items).values())))
                 if s > best + 1e-6:
                     best, params = s, trial
         print('  giro {}: {:.4f} {}'.format(r + 1, best, params), flush=True)
@@ -243,7 +246,8 @@ def meta_of(items, events=None):
     for it in items:
         df = dati.load(*it)
         nd = (df['n_casa'].values + df['n_ospiti'].values) == 0
-        out[it] = (df['y'].values, df['period'].values, nd, None if events is None else events[it])
+        dm = np.fmin(df['d_casa'].values, df['d_ospiti'].values) if 'd_casa' in df.columns else None
+        out[it] = (df['y'].values, df['period'].values, nd, None if events is None else events[it], dm)
     return out
 
 

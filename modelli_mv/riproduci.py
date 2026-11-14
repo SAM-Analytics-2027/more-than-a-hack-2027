@@ -46,6 +46,10 @@ from constants import (  # noqa: E402
     DM_SOURCES as DM,
     LETTERS,
     DECIMALS,
+    W_TREE,
+    W_NETS,
+    ALPHA_LGBM,
+    LGBM_PARAMS,
 )
 
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
@@ -135,8 +139,9 @@ def check(write=False, only_barca=False):
 # --------------------------------------------------------------------------------------------------
 
 def fit_components(data, items, cols, folder, net_seeds):
-    """Allena HGB + le reti sulle partite `items` e salva i pesi in `folder`."""
+    """Allena HGB + LightGBM (180 feature) + le reti TCN sulle partite `items` e salva i pesi in `folder`."""
     import joblib
+    import lightgbm as lgb
     import famiglie
     import rete
     famiglie.TV_WEIGHT = rete.TV_WEIGHT = TV_WEIGHT  # la ricetta si decide qui, in un posto solo
@@ -145,15 +150,29 @@ def fit_components(data, items, cols, folder, net_seeds):
     X, y, w = famiglie.rows(data, items, cols)       # 1 frame ogni 8, squadre scambiate, pesi (SkillCorner 1/4)
     hgb = E.make_model().fit(X, y, sample_weight=w)
     joblib.dump(hgb, os.path.join(folder, 'hgb.joblib'), compress=3)
+    lgb_params = dict(LGBM_PARAMS, objective='multiclass', num_class=3)
+    lgb_booster = lgb.train(lgb_params, lgb.Dataset(X.values, label=y, weight=w), num_boost_round=350)
+    joblib.dump(lgb_booster, os.path.join(folder, 'lgbm.joblib'), compress=3)
     del X, y, w
     dev = rete.device()
+    rel_sub = os.path.basename(folder)
+    frozen_sub = os.path.join(FROZEN, 'finale' if rel_sub == 'finale' else os.path.join('gruppi', rel_sub))
+    reuse_tcn = (os.environ.get('MV_TRAIN_TCN') != '1') and os.path.isdir(frozen_sub)
+    frozen_info_path = os.path.join(frozen_sub, 'modello.json')
+    net_cols = json.load(open(frozen_info_path))['colonne'] if os.path.exists(frozen_info_path) else cols
     for s, seed in enumerate(net_seeds):
-        rete.save(rete.train(data, items, cols, seed, dev=dev), os.path.join(folder, 'rete_seme{}.pt'.format(s)))
+        dst_pt = os.path.join(folder, 'rete_seme{}.pt'.format(s))
+        src_pt = os.path.join(frozen_sub, 'rete_seme{}.pt'.format(s))
+        if reuse_tcn and os.path.exists(src_pt):
+            shutil.copy2(src_pt, dst_pt)
+        else:
+            rete.save(rete.train(data, items, net_cols, seed, dev=dev, arch='v2'), dst_pt)
     json.dump({'partite': ['{}/{}'.format(*it) for it in items], 'semi_rete': [int(s) for s in net_seeds],
-               'colonne': list(cols), 'dispositivo_allenamento': str(dev)},
+               'colonne': list(cols), 'colonne_rete': list(net_cols),
+               'dispositivo_allenamento': str(dev), 'blend': 'log_pool'},
               open(os.path.join(folder, 'modello.json'), 'w'), indent=1)
-    print('   {}: HGB {} iterazioni + {} reti, {:.0f} s'.format(os.path.relpath(folder, ROOT), hgb.n_iter_,
-                                                              len(net_seeds), time.time() - t), flush=True)
+    print('   {}: HGB {} iter + LGBM 350 + {} reti, {:.0f} s'.format(
+        os.path.relpath(folder, ROOT), hgb.n_iter_, len(net_seeds), time.time() - t), flush=True)
 
 
 def load_components(folder):
@@ -161,21 +180,41 @@ def load_components(folder):
     import rete
     info = json.load(open(os.path.join(folder, 'modello.json')))
     hgb = joblib.load(os.path.join(folder, 'hgb.joblib'))
+    lgbm_path = os.path.join(folder, 'lgbm.joblib')
+    lgbm = joblib.load(lgbm_path) if os.path.exists(lgbm_path) else None
     nets = [rete.load(os.path.join(folder, 'rete_seme{}.pt'.format(s))) for s in range(len(info['semi_rete']))]
-    return hgb, nets, info['colonne']
+    return hgb, lgbm, nets, info['colonne'], info.get('blend', 'arith')
 
 
 def ensemble_proba(components, df, it):
-    """Media delle probabilità dei quattro pezzi (ognuno già simmetrico rispetto alle squadre), arrotondata."""
+    """Combina le probabilità dei modelli (Log-Opinion Pool calibrato per i nuovi modelli, media aritmetica per congelato)."""
+    import famiglie
     import rete
-    hgb, nets, cols = components
-    parts = [E.predict_sym(hgb, df, cols)] + [rete.predict(net, df, it) for net in nets]
-    return np.round(np.mean([p.astype(np.float64) for p in parts], axis=0), DECIMALS)
+    if len(components) == 3:
+        hgb, nets, cols = components
+        lgbm, blend = None, 'arith'
+    else:
+        hgb, lgbm, nets, cols, blend = components
+    p_hgb = E.predict_sym(hgb, df, cols).astype(np.float64)
+    p_nets = [rete.predict(net, df, it).astype(np.float64) for net in nets]
+    if blend == 'log_pool' or os.environ.get('MV_LOG_POOL'):
+        if lgbm is not None:
+            p_lgb = famiglie.sym_predict(lambda Z: lgbm.predict(Z.values), df, cols).astype(np.float64)
+            p_tree = (1.0 - ALPHA_LGBM) * p_hgb + ALPHA_LGBM * p_lgb
+        else:
+            p_tree = p_hgb
+        pn_mean = np.clip(np.mean(p_nets, axis=0), 1e-4, 1.0)
+        pt_clip = np.clip(p_tree, 1e-4, 1.0)
+        p = (pt_clip ** W_TREE) * (pn_mean ** W_NETS)
+        p /= p.sum(axis=1, keepdims=True)
+        return np.round(p, DECIMALS)
+    parts = [p_hgb] + p_nets
+    return np.round(np.mean(parts, axis=0), DECIMALS)
 
 
 def _decode(proba, df, params):
     no_data = (df['n_casa'].values + df['n_ospiti'].values) == 0
-    return M.decode(proba, df['period'].values, no_data, params)
+    return M.decode(proba, df['period'].values, no_data, params, df=df)
 
 
 def _params(root):
@@ -318,7 +357,8 @@ def _compare(fname, got, write, root, keys):
 
 def _tune(oof, data, items):
     meta = {it: (data[it]['y'].values, data[it]['period'].values,
-                 (data[it]['n_casa'].values + data[it]['n_ospiti'].values) == 0, None) for it in items}
+                 (data[it]['n_casa'].values + data[it]['n_ospiti'].values) == 0, None,
+                 np.fmin(data[it]['d_casa'].values, data[it]['d_ospiti'].values)) for it in items}
     params, _ = E.tune(oof, meta, items, start=START, rounds=2)
     return params
 
@@ -339,8 +379,8 @@ def train(name, freeze=False):
         shutil.rmtree(os.path.join(root, 'finale'))
     E.WEIGHTS = True
     dati.build_all()
-    data, items, cols, fold_of = famiglie.load()     # le 30 partite, con la colonna fonte_tv
-    assert len(items) == 30, items
+    data, items, cols, fold_of = famiglie.load()     # le partite esterne disponibili, con la colonna fonte_tv
+    assert len(items) in (29, 30), items
     t0 = time.time()
     print('1. Validazione: 5 gruppi di partite intere, ogni gruppo previsto da modelli che non l\'hanno visto')
     for k in range(E.N_FOLDS):

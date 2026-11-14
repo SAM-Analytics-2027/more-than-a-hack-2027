@@ -24,6 +24,7 @@ from constants import (  # noqa: E402
     FPS, SPEED_HALF, WALK, NEAR, TOUCH, WINDOWS,
     ASYMMETRIC_WINDOWS, TOUCH_COUNT_WINDOWS,
     GAP_CLIP_FRAMES, NO_BALL_INITIAL_OFFSET, MAX_STREAK,
+    STREAK_RESET_GAP, BALL_INTERP_MAX_GAP,
     FIELD_BOUND_TOLERANCE, PERCENTILE_VELOCITY,
 )
 
@@ -126,28 +127,63 @@ def _last_next(touch, segs):
     return last, since, nxt, until
 
 
-def _streak(touch, segs):
+def _streak(touch, segs, out_of_bounds=None):
     """Quante serie di tocchi consecutive (passaggi) ha fatto la squadra dell'ultimo tocco, senza tocchi avversari.
 
-    Segno: positivo se è la casa, negativo se sono gli ospiti.
+    Segno: positivo se è la casa, negativo se sono gli ospiti. Si azzera se la palla esce dal campo o
+    se trascorrono più di STREAK_RESET_GAP frame senza alcun tocco (palla morta / interruzione).
     """
     out = np.zeros(len(touch), dtype=np.float32)
+    oob = np.nan_to_num(out_of_bounds, nan=0.0) > 0.5 if out_of_bounds is not None else np.zeros(len(touch), dtype=bool)
     for a, b in segs:
-        cur, count, prev = 0.0, 0, 0.0
+        cur, count, prev, gap = 0.0, 0, 0.0, 0
         v = touch[a:b]
+        ob = oob[a:b]
         for i in range(b - a):
+            if ob[i]:
+                cur, count, prev, gap = 0.0, 0, 0.0, 0
+                out[a + i] = 0.0
+                continue
             x = v[i]
-            if x != 0 and x != prev:
-                if x == cur:
-                    count += 1
-                else:
-                    cur, count = x, 1
             if x != 0:
+                if gap > STREAK_RESET_GAP:
+                    cur, count, prev = 0.0, 0, 0.0
+                gap = 0
+                if x != prev:
+                    if x == cur:
+                        count += 1
+                    else:
+                        cur, count = x, 1
                 prev = x
-            elif prev != 0:
-                prev = 0.0
+            else:
+                gap += 1
+                if prev != 0:
+                    prev = 0.0
+                if gap > STREAK_RESET_GAP:
+                    cur, count = 0.0, 0
             out[a + i] = cur * count
     return np.clip(out, -MAX_STREAK, MAX_STREAK)
+
+
+def _interp_short_gaps(bx, by, bx_ff, by_ff, palla_fuori, segs):
+    """Interpolazione lineare balistica (bx_lin, by_lin) nei buchi brevi (<= BALL_INTERP_MAX_GAP)
+    quando entrambi gli estremi sono dentro il campo; altrimenti ripiega su forward-fill (bx_ff, by_ff).
+    """
+    bx_lin = bx_ff.copy()
+    by_lin = by_ff.copy()
+    vis = ~np.isnan(bx)
+    in_b = vis & (np.nan_to_num(palla_fuori, nan=1.0) < 0.5)
+    for a, b in segs:
+        v = np.flatnonzero(vis[a:b])
+        if len(v) < 2:
+            continue
+        for i0, i1 in zip(v[:-1], v[1:]):
+            gap = i1 - i0 - 1
+            if 0 < gap <= BALL_INTERP_MAX_GAP and in_b[a + i0] and in_b[a + i1]:
+                w = np.linspace(0.0, 1.0, gap + 2, dtype=np.float32)[1:-1]
+                bx_lin[a + i0 + 1:a + i1] = (1.0 - w) * bx[a + i0] + w * bx[a + i1]
+                by_lin[a + i0 + 1:a + i1] = (1.0 - w) * by[a + i0] + w * by[a + i1]
+    return bx_lin, by_lin
 
 
 def _nanmin_rows(a):
@@ -260,8 +296,15 @@ def features(match):
         f['vx_' + name] = np.nanmean(vx[:, m], axis=1)
     f['cx_diff'] = f['cx_casa'] - f['cx_ospiti']
     f['vx_diff'] = f['vx_casa'] - f['vx_ospiti']
+    f['cx_pack'] = 0.5 * (f['cx_casa'] + f['cx_ospiti'])
+    f['vx_pack'] = 0.5 * (f['vx_casa'] + f['vx_ospiti'])
     f['sx_diff'] = f['sx_casa'] - f['sx_ospiti']
     f['sy_diff'] = f['sy_casa'] - f['sy_ospiti']
+    v_mean_mag = np.hypot(np.nanmean(vx, axis=1), np.nanmean(vy, axis=1))
+    f['allinea_vel'] = v_mean_mag / (f['vel_media'] + 0.5)
+    in_own_H = np.nanmean(np.where(np.isnan(px[:, H]), np.nan, (px[:, H] < 1.0).astype(np.float32)), axis=1)
+    in_own_A = np.nanmean(np.where(np.isnan(px[:, A]), np.nan, (px[:, A] > -1.0).astype(np.float32)), axis=1)
+    f['meta_separate'] = 0.5 * (in_own_H + in_own_A)
     # linea difensiva: il penultimo giocatore verso la propria porta (il portiere è l'ultimo)
     hx = np.where(np.isnan(px[:, H]), np.inf, px[:, H])
     ax = np.where(np.isnan(px[:, A]), -np.inf, px[:, A])
@@ -281,7 +324,7 @@ def features(match):
     f['vicini_casa'] = np.where(vis, (d[:, H] < NEAR).sum(1), np.nan).astype(np.float32)
     f['vicini_ospiti'] = np.where(vis, (d[:, A] < NEAR).sum(1), np.nan).astype(np.float32)
     closest_home = np.where(np.isnan(dH) | np.isnan(dA), np.nan, (dH < dA) + 0.5 * (dH == dA)).astype(np.float32)
-    # quando la palla manca: distanza dall'ultima posizione vista (la palla non si teletrasporta)
+    # quando la palla manca: distanza dall'ultima posizione vista e dall'interpolazione lineare nei buchi brevi
     bx_ff = pd.Series(bx).groupby(period).ffill().to_numpy(np.float32)
     by_ff = pd.Series(by).groupby(period).ffill().to_numpy(np.float32)
     dff = np.hypot(px - bx_ff[:, None], py - by_ff[:, None])
@@ -289,6 +332,12 @@ def features(match):
     f['dff_ospiti'] = _nanmin_rows(dff[:, A])
     f['dff_diff'] = f['dff_casa'] - f['dff_ospiti']
     f['bx_ff'] = bx_ff
+    bx_lin, by_lin = _interp_short_gaps(bx, by, bx_ff, by_ff, f['palla_fuori'], segs)
+    dlin = np.hypot(px - bx_lin[:, None], py - by_lin[:, None])
+    f['dlin_casa'] = _nanmin_rows(dlin[:, H])
+    f['dlin_ospiti'] = _nanmin_rows(dlin[:, A])
+    f['dlin_diff'] = f['dlin_casa'] - f['dlin_ospiti']
+    f['bx_lin'] = bx_lin
     # velocità del giocatore più vicino di ogni squadra (chi conduce va piano con la palla vicina)
     dH_full = np.where(np.isnan(d[:, H]), np.inf, d[:, H])
     dA_full = np.where(np.isnan(d[:, A]), np.inf, d[:, A])
@@ -297,6 +346,19 @@ def features(match):
     r = np.arange(T)
     f['vel_vicino_casa'] = np.where(np.isnan(dH), np.nan, spH[r, iH])
     f['vel_vicino_ospiti'] = np.where(np.isnan(dA), np.nan, spA[r, iA])
+    # velocità radiale di avvicinamento alla palla (interpolata) del giocatore più vicino per squadra
+    dlinH_full = np.where(np.isnan(dlin[:, H]), np.inf, dlin[:, H])
+    dlinA_full = np.where(np.isnan(dlin[:, A]), np.inf, dlin[:, A])
+    iH_lin, iA_lin = dlinH_full.argmin(1), dlinA_full.argmin(1)
+    pxH, pyH, vxH, vyH = px[:, H][r, iH_lin], py[:, H][r, iH_lin], vx[:, H][r, iH_lin], vy[:, H][r, iH_lin]
+    pxA, pyA, vxA, vyA = px[:, A][r, iA_lin], py[:, A][r, iA_lin], vx[:, A][r, iA_lin], vy[:, A][r, iA_lin]
+    uxH = (bx_lin - pxH) / (f['dlin_casa'] + 0.1)
+    uyH = (by_lin - pyH) / (f['dlin_casa'] + 0.1)
+    uxA = (bx_lin - pxA) / (f['dlin_ospiti'] + 0.1)
+    uyA = (by_lin - pyA) / (f['dlin_ospiti'] + 0.1)
+    f['v_avv_casa'] = np.where(np.isnan(f['dlin_casa']), np.nan, vxH * uxH + vyH * uyH)
+    f['v_avv_ospiti'] = np.where(np.isnan(f['dlin_ospiti']), np.nan, vxA * uxA + vyA * uyA)
+    f['v_avv_diff'] = f['v_avv_casa'] - f['v_avv_ospiti']
 
     # tocchi: palla vista entro TOUCH metri da un giocatore. Le regole parlano di controllo
     # ("tiene la palla qualche secondo", "più di due passaggi di fila"): servono chi ha toccato per ultimo,
@@ -321,20 +383,22 @@ def features(match):
         f['tocchi_ospiti_f{}'.format(w)] = _window_sum(starts * (touch < 0), segs, 0, w)
         f['tenuta_casa_c{}'.format(w)] = _window_sum((touch > 0).astype(np.float32), segs, w, w)
         f['tenuta_ospiti_c{}'.format(w)] = _window_sum((touch < 0).astype(np.float32), segs, w, w)
-    f['serie_ultimo'] = _streak(touch, segs)
+    f['serie_ultimo'] = _streak(touch, segs, f['palla_fuori'])
 
     # finestre nel tempo
     base = {
         'd_diff': f['d_diff'], 'vicino_casa': closest_home, 'palla_vista': f['palla_vista'],
         'vel_media': f['vel_media'], 'quota_cammina': f['quota_cammina'], 'palla_vel': f['palla_vel'],
         'palla_vx': f['palla_vx'], 'palla_acc': f['palla_acc'], 'bx': bx, 'vx_diff': f['vx_diff'],
-        'cx_diff': f['cx_diff'], 'dff_diff': f['dff_diff'], 'palla_fuori': f['palla_fuori'],
+        'cx_diff': f['cx_diff'], 'cx_pack': f['cx_pack'], 'vx_pack': f['vx_pack'],
+        'dff_diff': f['dff_diff'], 'dlin_diff': f['dlin_diff'], 'v_avv_diff': f['v_avv_diff'],
+        'allinea_vel': f['allinea_vel'], 'palla_fuori': f['palla_fuori'],
         'd_min': np.fmin(dH, dA),
     }
     for name, v in base.items():
         for w in WINDOWS:
             f['{}_c{}'.format(name, w)] = _window_mean(v, segs, w, w)
-    for name in ('d_diff', 'vicino_casa', 'palla_vista', 'vel_media', 'palla_vel', 'bx', 'vx_diff'):
+    for name in ('d_diff', 'dlin_diff', 'vicino_casa', 'palla_vista', 'vel_media', 'palla_vel', 'bx', 'vx_diff', 'cx_pack', 'vx_pack'):
         for w in ASYMMETRIC_WINDOWS:
             f['{}_p{}'.format(name, w)] = _window_mean(base[name], segs, w, -1)
             f['{}_f{}'.format(name, w)] = _window_mean(base[name], segs, -1, w)
@@ -359,7 +423,8 @@ def swap_teams(df):
     neg = []
     for c in cols:
         root = re.sub(r'_[cpf]\d+$', '', c)
-        if root in ('bx', 'palla_vx', 'bx_ff', 'd_diff', 'sx_diff', 'sy_diff', 'dff_diff'):  # cx_diff e vx_diff non cambiano
+        if root in ('bx', 'palla_vx', 'bx_ff', 'bx_lin', 'd_diff', 'sx_diff', 'sy_diff',
+                    'dff_diff', 'dlin_diff', 'v_avv_diff', 'cx_pack', 'vx_pack'):
             neg.append(c)
     neg += [c for c in cols if c in ('ultimo_tocco', 'prossimo_tocco', 'serie_ultimo')]
     for c in neg:
@@ -373,13 +438,16 @@ def swap_teams(df):
         if c.startswith('vicino_casa'):
             out[c] = 1.0 - df[c]
     pairs = [('n_casa', 'n_ospiti'), ('vel_casa', 'vel_ospiti'), ('d_casa', 'd_ospiti'), ('d2_casa', 'd2_ospiti'),
-             ('vicini_casa', 'vicini_ospiti'), ('dff_casa', 'dff_ospiti'), ('vel_vicino_casa', 'vel_vicino_ospiti')]
+             ('vicini_casa', 'vicini_ospiti'), ('dff_casa', 'dff_ospiti'), ('dlin_casa', 'dlin_ospiti'),
+             ('vel_vicino_casa', 'vel_vicino_ospiti'), ('v_avv_casa', 'v_avv_ospiti')]
     for a, b in pairs:
-        out[a], out[b] = df[b].values, df[a].values
+        if a in out.columns and b in out.columns:
+            out[a], out[b] = df[b].values, df[a].values
     for stat in ('cx', 'cy', 'sx', 'sy', 'vx'):
         a, b = stat + '_casa', stat + '_ospiti'
-        sign = -1.0 if stat in ('cx', 'cy', 'vx') else 1.0
-        out[a], out[b] = sign * df[b].values, sign * df[a].values
+        if a in out.columns and b in out.columns:
+            sign = -1.0 if stat in ('cx', 'cy', 'vx') else 1.0
+            out[a], out[b] = sign * df[b].values, sign * df[a].values
     # xmin/xmax: girando il campo il minimo diventa il massimo
     out['xmin_casa'], out['xmax_casa'] = -df['xmax_ospiti'].values, -df['xmin_ospiti'].values
     out['xmin_ospiti'], out['xmax_ospiti'] = -df['xmax_casa'].values, -df['xmin_casa'].values

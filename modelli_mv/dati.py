@@ -25,6 +25,8 @@ import caratteristiche as C  # noqa: E402
 from constants import VERSION, SOURCES, CODE, BARCA, MATCHES  # noqa: E402
 
 BASE = os.path.join(C.fc.DATA_DIR, 'altre_partite')
+if not os.path.isdir(BASE) and os.path.isdir(os.path.join(C.fc.DATA_DIR, 'training')):
+    BASE = os.path.join(C.fc.DATA_DIR, 'training')
 CACHE = os.path.join(C.fc.DATA_DIR, 'cache_mv')
 
 _CODE_HASH = None
@@ -93,10 +95,17 @@ def build_one(item):
     return out
 
 
+def _has_raw(item):
+    src, mid = item
+    if src == 'barca':
+        return os.path.exists(os.path.join(C.fc.DATA_DIR, 'tactical', 'BAR-ATH_tactical_atd.txt'))
+    return os.path.exists(os.path.join(BASE, src + '_sporcate', mid, '{}_atd.txt'.format(mid)))
+
+
 def build_all(items=None, workers=4):
     """Prepara la cache delle partite che non ce l'hanno ancora."""
     items = items or external_matches() + [BARCA]
-    todo = [it for it in items if not os.path.exists(_path(*it))]
+    todo = [it for it in items if not os.path.exists(_path(*it)) and _has_raw(it)]
     if not todo:
         return
     print('preparo le caratteristiche di {} partite in {}'.format(len(todo), _feat_dir()), flush=True)
@@ -112,7 +121,8 @@ def load(src, mid):
 def load_all(items=None):
     """{(fonte, id): DataFrame} per le partite esterne."""
     items = items or external_matches()
-    return {it: load(*it) for it in items}
+    avail = [it for it in items if os.path.exists(_path(*it)) or _has_raw(it)]
+    return {it: load(*it) for it in avail}
 
 
 if __name__ == '__main__':
