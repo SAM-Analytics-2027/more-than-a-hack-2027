@@ -72,7 +72,7 @@ def main(name, params_file, sources, flag=False, ev_name=None):
         events = (ev_model.predict_proba(X) + ev_model.predict_proba(C.swap_teams(X)[cols])) / 2
     period = target['period'].values
     no_data = (target['n_casa'].values + target['n_ospiti'].values) == 0
-    pred = M.decode(proba, period, no_data, params, events)
+    pred = M.decode(proba, period, no_data, params, events, df=target)
     out = os.path.join(C.ROOT, 'evaluation', 'results', 'mv_{}.csv'.format(tag.replace('+', '_')))
     pd.DataFrame({'frame': np.arange(len(pred)), 'label': LETTERS[pred]}).to_csv(out, index=False)
     np.save(os.path.join(dati.CACHE, 'barca_proba_{}.npy'.format(name)), proba)
@@ -85,7 +85,7 @@ def combine(names, params_file, out_name):
     proba = np.mean([np.load(os.path.join(dati.CACHE, 'barca_proba_{}.npy'.format(n))) for n in names], axis=0)
     params = json.load(open(os.path.join(dati.CACHE, params_file)))['params']
     no_data = (target['n_casa'].values + target['n_ospiti'].values) == 0
-    pred = M.decode(proba, target['period'].values, no_data, params)
+    pred = M.decode(proba, target['period'].values, no_data, params, df=target)
     out = os.path.join(C.ROOT, 'evaluation', 'results', 'mv_{}.csv'.format(out_name))
     pd.DataFrame({'frame': np.arange(len(pred)), 'label': LETTERS[pred]}).to_csv(out, index=False)
     print('scritto', out, params, {k: int((LETTERS[pred] == k).sum()) for k in 'HADX'})

@@ -31,7 +31,10 @@ import numpy as np
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 DATA_DIR = os.environ.get('MTAH_DATA_DIR') or os.path.join(ROOT, 'data')
 
-from constants import FPS, HOME, AWAY, OUR_FRAMES, OUR_LENGTH, OUR_WIDTH, OUR_HALVES
+from constants import (
+    FPS, HOME, AWAY, OUR_FRAMES, OUR_LENGTH, OUR_WIDTH, OUR_HALVES,
+    BROADCAST_MAX_CENTROID_DIST,
+)
 
 
 def _only(folder, pattern):
@@ -41,10 +44,72 @@ def _only(folder, pattern):
     return hits[0]
 
 
+def _fuse_broadcast_ball(tac, data_dir):
+    """Integra le coordinate palla mancanti nel tracking tattico con quelle del tracking broadcast sincronizzato,
+    scartando i frame di replay televisivo tramite verifica di congruenza del baricentro dei giocatori.
+    """
+    bro_dir = os.path.join(data_dir, 'broadcast')
+    if not os.environ.get('MV_USE_BROADCAST') or not os.path.isdir(bro_dir):
+        return tac
+    try:
+        bro = read_epts(bro_dir, name='Broadcast', length=OUR_LENGTH, width=OUR_WIDTH)
+    except Exception:
+        return tac
+
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=RuntimeWarning)
+        tac_cx = np.nanmean(tac['px'], axis=1)
+        tac_cy = np.nanmean(tac['py'], axis=1)
+        bro_cx = np.nanmean(bro['px'], axis=1)
+        bro_cy = np.nanmean(bro['py'], axis=1)
+
+    for half, a, b in OUR_HALVES:
+        tx, ty = tac['bx'][a:b + 1], tac['by'][a:b + 1]
+        lo_d = -10000 if half == 1 else -35000
+        hi_d = 0 if half == 1 else -25000
+        best_d, best_err = 0, 1e9
+        for d in range(lo_d, hi_d + 1, 10):
+            b_lo, b_hi = a + d, b + d + 1
+            if b_lo < 0 or b_hi > len(bro['bx']):
+                continue
+            bx, by = bro['bx'][b_lo:b_hi], bro['by'][b_lo:b_hi]
+            both = (~np.isnan(tx)) & (~np.isnan(bx))
+            if int(both.sum()) < 2000:
+                continue
+            err = float(np.median(np.hypot(tx[both] - bx[both], ty[both] - by[both])))
+            if err < best_err:
+                best_err, best_d = err, d
+        for d in range(best_d - 12, best_d + 13):
+            b_lo, b_hi = a + d, b + d + 1
+            if b_lo < 0 or b_hi > len(bro['bx']):
+                continue
+            bx, by = bro['bx'][b_lo:b_hi], bro['by'][b_lo:b_hi]
+            both = (~np.isnan(tx)) & (~np.isnan(bx))
+            if int(both.sum()) < 2000:
+                continue
+            err = float(np.median(np.hypot(tx[both] - bx[both], ty[both] - by[both])))
+            if err < best_err:
+                best_err, best_d = err, d
+        if best_err < 2.0:
+            t_idx = np.arange(a, b + 1)
+            b_idx = t_idx + best_d
+            ok_b = (b_idx >= 0) & (b_idx < len(bro['bx']))
+            t_idx, b_idx = t_idx[ok_b], b_idx[ok_b]
+            miss = np.isnan(tac['bx'][t_idx]) & (~np.isnan(bro['bx'][b_idx]))
+            c_dist = np.hypot(tac_cx[t_idx] - bro_cx[b_idx], tac_cy[t_idx] - bro_cy[b_idx])
+            live_ok = np.isnan(c_dist) | (c_dist < BROADCAST_MAX_CENTROID_DIST)
+            use = miss & live_ok
+            tac['bx'][t_idx[use]] = bro['bx'][b_idx[use]]
+            tac['by'][t_idx[use]] = bro['by'][b_idx[use]]
+    return tac
+
+
 def read_ours(data_dir=DATA_DIR):
-    """Barça–Athletic dai file della gara (tactical/). Campo e tempi dalle costanti della repo ufficiale."""
-    return read_epts(os.path.join(data_dir, 'tactical'), name='Barça–Athletic',
-                     length=OUR_LENGTH, width=OUR_WIDTH, halves=OUR_HALVES)
+    """Barça–Athletic dai file della gara (tactical/ + fusione palla da broadcast/)."""
+    tac = read_epts(os.path.join(data_dir, 'tactical'), name='Barça–Athletic',
+                    length=OUR_LENGTH, width=OUR_WIDTH, halves=OUR_HALVES)
+    return _fuse_broadcast_ball(tac, data_dir)
 
 
 def _xml_parts(path):

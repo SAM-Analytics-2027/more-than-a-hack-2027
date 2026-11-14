@@ -135,6 +135,14 @@ NO_BALL_INITIAL_OFFSET = 250
 # Compreso tra -20 (20 passaggi consecutivi ospiti) e +20 (20 passaggi consecutivi casa).
 MAX_STREAK = 20
 
+# Massimo numero di frame senza tocchi prima di azzerare il conteggio dei passaggi consecutivi (`_streak`),
+# per evitare che passaggi avvenuti prima di una rimessa/palla morta vengano sommati all'azione successiva.
+STREAK_RESET_GAP = 100
+
+# Massimo buco temporale (in frame, 125 frame = 5.0 s) entro cui interpolare linearmente la traiettoria
+# balistica del pallone (`bx_lin`, `by_lin`) quando entrambi gli estremi sono dentro il campo.
+BALL_INTERP_MAX_GAP = 125
+
 # Percentile calcolato sulle velocità di tutti i giocatori in campo nel singolo frame (90° percentile).
 # Rappresenta la velocità di punta dei giocatori più attivi nell'azione, isolando eventuali outlier.
 PERCENTILE_VELOCITY = 90
@@ -212,9 +220,9 @@ NET_STRIDE = 5
 CROP = 300
 NET_CROP = 300
 
-# Numero di epoche di addestramento per ciascuna rete neurale (default: 20 epoche).
-EPOCHS = 20
-NET_EPOCHS = 20
+# Numero di epoche di addestramento per ciascuna rete neurale (default: 12 epoche con importance sampling).
+EPOCHS = 12
+NET_EPOCHS = 12
 
 # Canali intermedi della rete neurale convoluzionale 1D.
 CHANNELS = 96
@@ -261,6 +269,21 @@ NET_FEATURE_CLIP = (-6.0, 6.0)
 # (seed, seed + 1000, seed + 2000), riducendo la varianza delle predizioni.
 N_NETS = 3
 
+# Perdita ausiliaria di regolarizzazione temporale (Truncated MSE) tra frame adiacenti con la stessa etichetta
+# e peso della testa multi-task di transizione nella TCN.
+SMOOTH_WEIGHT = 0.15
+SMOOTH_TAU = 4.0
+TRANS_WEIGHT = 0.15
+
+# Pesi del Log-Opinion Pool (media geometrica calibrata tra famiglia ad alberi e famiglia di reti TCN).
+W_TREE = 0.15
+W_NETS = 0.85
+ALPHA_LGBM = 0.50
+
+# Distanza massima (in metri) tra baricentro tattico e baricentro broadcast per validare che il frame
+# broadcast sia in diretta e non un replay televisivo durante la fusione della palla per Barça–Athletic.
+BROADCAST_MAX_CENTROID_DIST = 12.0
+
 # Nome del modello di riferimento
 MODEL_NAME = 'mv_hgb_rete3'
 NAME = MODEL_NAME
@@ -272,14 +295,14 @@ NAME = MODEL_NAME
 
 # Iperparametri ottimali per HistGradientBoostingClassifier di scikit-learn:
 HGB_PARAMS = {
-    'max_iter': 500,               # Massimo numero di alberi di boosting
+    'max_iter': 260,               # Massimo numero di alberi di boosting
     'learning_rate': 0.08,          # Tasso di apprendimento per ogni albero aggiunto
     'max_leaf_nodes': 63,          # Numero massimo di foglie per albero (~profondità 6)
     'min_samples_leaf': 200,       # Minimo numero di campioni per foglia (previene memorizzazione rumore)
     'l2_regularization': 1.0,       # Penalità L2 sui pesi delle foglie
     'early_stopping': True,        # Attiva l'arresto anticipato se la perdita non scende
     'validation_fraction': 0.1,    # Frazione interna dei dati tenuta per l'early stopping
-    'n_iter_no_change': 25,        # Tolleranza: ferma l'addestramento se non migliora per 25 iterazioni
+    'n_iter_no_change': 20,        # Tolleranza: ferma l'addestramento se non migliora per 20 iterazioni
     'random_state': SEED,          # Riproducibilità del boosting
 }
 
@@ -335,17 +358,25 @@ DEFAULT_VITERBI_PARAMS = DEFAULT
 
 # Parametri ottimali del decodificatore di Viterbi per il modello finale `mv_hgb_rete3`:
 # Ottenuti tramite ricerca per coordinate (2 round) ottimizzando lo spellF1 sulle 10 partite DFL + Metrica.
-START = dict(turn=9.0, stop=13.0, rest=9.0, m_pos=5, m_dead=60, bias_d=-0.5)
+START = dict(
+    turn=9.5, stop=4.0, rest=9.0, m_pos=5, m_dead=60, bias_d=-0.6,
+    pen_no_touch=2.0, touch_th=2.8, m_pre=15, pen_pre=0.5, pen_same=1.0,
+)
 VITERBI_PARAMS_FROZEN = START
 
 # Griglia di ricerca per l'ottimizzazione per coordinate del decodificatore di Viterbi (esperimento.py).
 GRID = {
-    'turn': [2, 4, 6, 9, 13, 18, 25, 35],
-    'stop': [2, 4, 6, 9, 13, 18, 25],
-    'rest': [2, 4, 6, 9, 13, 18, 25],
-    'm_pos': [5, 10, 15, 20, 30, 40, 55, 75],
-    'm_dead': [10, 20, 30, 40, 60, 85],
-    'bias_d': [-1.0, -0.5, -0.25, 0.0, 0.25, 0.5, 1.0],
+    'turn': [6.0, 8.0, 9.0, 9.5, 10.0, 11.5, 13.0, 18.0],
+    'stop': [3.0, 4.0, 5.0, 6.0, 9.0, 13.0],
+    'rest': [6.0, 8.0, 9.0, 9.5, 11.0, 13.0],
+    'm_pos': [4, 5, 6, 8, 12, 20],
+    'm_dead': [40, 50, 55, 60, 70],
+    'bias_d': [-0.7, -0.6, -0.5, -0.4, -0.25, 0.0, 0.25],
+    'pen_no_touch': [0.0, 1.5, 2.0, 2.5, 3.0, 3.5],
+    'touch_th': [2.0, 2.2, 2.5, 2.8],
+    'm_pre': [15, 25, 35, 50],
+    'pen_pre': [0.0, 0.5, 1.0, 1.5],
+    'pen_same': [-1.0, 0.0, 0.5, 1.0, 1.5],
 }
 VITERBI_GRID = GRID
 
