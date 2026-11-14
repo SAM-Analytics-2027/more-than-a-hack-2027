@@ -29,14 +29,9 @@ conda activate mtah
 
 ---
 
-## Data Placement & Challenge Rules Compliance
-
-* **Non-Redistribution:** In strict compliance with the competition rules, `data/` and generated prediction CSVs are excluded from this repository.
-* **Target Match Placement:** Place the official competition tracking bundle inside `data/tactical/` (preserving the original directory layout expected by `games.py` and `modelli_mv/dati.py`).
-
----
-
 ## Reproducing the Submission (`SAM-Analytics-2027.csv`)
+
+Ensure the `mtah` environment is active, then run the reproduction script from the repository root:
 
 **Linux / macOS:**
 ```bash
@@ -45,9 +40,18 @@ chmod +x reproduce.sh
 ```
 
 **Windows:**
-```cmd
-reproduce.bat
+```bat
+.\reproduce.bat
 ```
+
+> **Note ***ONLY*** if you are using Windows PowerShell / VS Code instead of any Conda terminal:** make sure `conda init` has been executed beforehand, then activate the environment (`conda activate mtah`) and run `.\reproduce.bat`.
+
+---
+
+## Data Placement & Challenge Rules Compliance
+
+* **Non-Redistribution:** In strict compliance with the competition rules, `data/` and generated prediction CSVs are excluded from this repository.
+* **Target Match Placement:** Place the official competition tracking bundle inside `data/tactical/` (preserving the original directory layout expected by `games.py` and `modelli_mv/dati.py`).
 
 ---
 
