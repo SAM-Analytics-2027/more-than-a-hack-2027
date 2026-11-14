@@ -167,6 +167,7 @@ META = ('frame', 'period', 'y')
 # Pesandole 0.25, contano complessivamente quanto 5 partite tattiche, evitando che il rumore televisivo
 # sovrasti il segnale pulito delle 10 partite DFL + Metrica.
 TV_WEIGHT = 0.25
+SOURCE_WEIGHTS = {'dfl': 1.0, 'metrica': 1.0, 'skillcorner': TV_WEIGHT}
 
 # Ponderazione basata sulla durata dei possessi (`short_spell_weights`):
 # Assegna un peso w = sqrt(mediana_durata / durata_possesso), limitato nell'intervallo [1/3, 3.0].
@@ -206,11 +207,19 @@ THREADS = 8
 # e le previsioni vengono poi interpolate linearmente a 25 fps.
 STRIDE = 5
 NET_STRIDE = 5
+# Passo di campionamento temporale della sequenza per la rete neurale convoluzionale:
+# 25 frame al secondo (passo nativo 0.040 s, STRIDE = 1). La rete analizza tutti i frame
+# a 25 Hz senza interpolazione o sfocatura temporale.
+STRIDE = 1
+NET_STRIDE = 1
 
 # Lunghezza della sequenza di addestramento (crop temporale):
 # 300 step a 5 fps = 60 secondi esatti di partita continua.
 CROP = 300
 NET_CROP = 300
+# 1500 step a 25 fps = 60 secondi esatti di partita continua.
+CROP = 1500
+NET_CROP = 1500
 
 # Numero di epoche di addestramento per ciascuna rete neurale (default: 20 epoche).
 EPOCHS = 20
@@ -225,6 +234,11 @@ NET_CHANNELS = 96
 # Campo ricettivo risultante: ±(1 + 2 + 4 + 8 + 16 + 32 + 64) = ±127 passi a 5 fps,
 # ovvero esattamente ±25.4 secondi di contesto temporale (passato e futuro) attorno a ciascun frame.
 DILATIONS = (1, 2, 4, 8, 16, 32, 64)
+# Dilatazioni temporali dei 10 blocchi convoluzionali residui:
+# Dilatazioni: 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 passi.
+# Campo ricettivo risultante: ±(1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512) = ±1023 passi a 25 fps,
+# ovvero esattamente ±40.92 secondi di contesto temporale (passato e futuro) attorno a ciascun frame.
+DILATIONS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
 NET_DILATIONS = DILATIONS
 
 # Dropout applicato all'interno di ciascun blocco residuo per prevenire l'overfitting.
@@ -333,10 +347,12 @@ EVENT_PROB_CLIP_MIN = 1e-3
 DEFAULT = dict(turn=6.0, stop=6.0, rest=6.0, m_pos=20, m_dead=40, bias_d=0.0)
 DEFAULT_VITERBI_PARAMS = DEFAULT
 
-# Parametri ottimali del decodificatore di Viterbi per il modello finale `mv_hgb_rete3`:
-# Ottenuti tramite ricerca per coordinate (2 round) ottimizzando lo spellF1 sulle 10 partite DFL + Metrica.
+# Punto iniziale della ricerca per coordinate, non i parametri del congelato.
 START = dict(turn=9.0, stop=13.0, rest=9.0, m_pos=5, m_dead=60, bias_d=-0.5)
-VITERBI_PARAMS_FROZEN = START
+VITERBI_SEARCH_START = START
+# Copia documentale dei parametri congelati. L'inferenza carica sempre il JSON
+# dell'artefatto; non usare questo riferimento per calibrare una nuova prova.
+VITERBI_PARAMS_FROZEN = dict(turn=9.0, stop=4.0, rest=9.0, m_pos=5, m_dead=60, bias_d=-0.5)
 
 # Griglia di ricerca per l'ottimizzazione per coordinate del decodificatore di Viterbi (esperimento.py).
 GRID = {
