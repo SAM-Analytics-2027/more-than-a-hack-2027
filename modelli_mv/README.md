@@ -72,7 +72,7 @@ Ci vogliono 5–15 minuti. L'ambiente si chiama `mtah`: Python 3.11 con le versi
 
 - **Ogni volta** che apri un terminale nuovo, scrivi prima `conda activate mtah`.
 - Se esiste già un ambiente `mtah`, scrivi prima `conda env remove -n mtah`.
-- Senza conda, solo su Windows e Linux: `pip install -r modelli_mv/requirements.txt` in un Python 3.11. Su un Mac con Anaconda Intel pip non trova torch 2.14.1: lì usa conda.
+- Senza conda, solo su Windows e Linux: `pip install -r requirements.txt` in un Python 3.11. Su un Mac con Anaconda Intel pip non trova torch 2.14.1: lì usa conda.
 
 **Perché le versioni esatte.** Con versioni diverse l'ultima cifra di alcuni calcoli può cambiare, e con lei qualche frame. `controlla` verifica le versioni.
 
@@ -243,6 +243,176 @@ Cambia il codice, poi lancia `allena` con un nome nuovo. Usa le tue iniziali e u
 Quando una prova batte chiaramente il riferimento, sulle 10 partite e sopra il rumore, la si congela al suo posto in `modelli_mv/congelato/`. Lo fa Matteo, con `allena --congela`, e poi la pubblica. Così tutti ripartono di nuovo dallo stesso punto.
 
 ---
+
+## Confronto dell'augmentation su partite esterne
+
+**Stato di `aug_sporcate_v2`: pipeline e CSV verificati tecnicamente;
+beneficio predittivo non dimostrato.** La procedura qui descritta riproduce
+l'esperimento già eseguito. La revisione metodologica e il nuovo confronto
+`aug_pulite_v3` sono documentati in [`changelog.md`](../changelog.md).
+
+La nuova implementazione parte dalle **pulite esterne** per generare input
+sporcati, stimando il profilo esclusivamente nelle partite del training effettivo.
+Confronta base e augmentation con tre repliche complete e calibrazione annidata;
+mantiene fisse le dieci sporcate valutate dalla dashboard. Le prove sulle singole
+componenti sono diagnostiche e usano il decoder della base. Il nuovo esperimento
+è completato: risultati, variabilità e limiti sono riportati nel changelog.
+La media delle tre repliche sulle dieci partite è **73,89 spellF1 / 93,89 macroF1**
+per la risporcatura, contro **74,00 / 93,83** della base. Non emerge un beneficio
+predittivo dimostrabile; restano discrepanze nelle durate delle occlusioni.
+La pipeline è verificata tecnicamente, ma questa ricetta non sostituisce il
+riferimento congelato. Sono stati verificati 2.790 input aumentati, 120 CSV
+esterni e due CSV finali riproducibili; dettagli e limiti nel changelog.
+Le sole cache Parquet delle viste di training di questo studio occupano circa
+146 GiB; per ripeterlo servono inoltre spazio per dati sorgente, pesi e probabilità.
+
+```powershell
+conda run --no-capture-output -n mtah python modelli_mv/studio_augmentation.py --nome aug_pulite_v3 --fase tutto
+conda run --no-capture-output -n mtah python modelli_mv/valida_studio_sporcature.py --esperimento aug_pulite_v3 --ricomputa --finale --diagnostica
+conda run --no-capture-output -n mtah python modelli_mv/valida_csv_studio.py --esperimento aug_pulite_v3
+```
+
+I risultati della nuova prova sono in `data/cache_mv/augmentation_runs/aug_pulite_v3/`;
+il log iniziale è `data/cache_mv/aug_pulite_v3.log`. Nella prosecuzione del 14 novembre
+le due code indipendenti scrivono in `data/cache_mv/aug_pulite_v3_aug_remaining.log`
+e `data/cache_mv/aug_pulite_v3_base_ablations.log`; la finalizzazione scrive in
+`data/cache_mv/finalize_after_workers_v3.log`. La verifica dei CSV richiede il confronto
+completo: ricostruisce tutte le 120 esportazioni dalle probabilità fuori gruppo
+salvate e dai rispettivi decoder, confrontando frame, etichette e byte. Non legge
+la ground truth del Barça e non modifica le predizioni.
+I CSV esterni compaiono nella pagina `/esterne` con prefisso `aug_pulite_v3__`;
+le sei prove sulle componenti hanno inoltre il prefisso `ab_`. I due CSV finali
+sono `aug_pulite_v3__base_r0.csv` e `aug_pulite_v3__risporcata_r0.csv` nella cartella
+`evaluation/results/` e compaiono nella prima pagina della dashboard quando pronti.
+Le repliche sono esperimenti distinti: la loro media non è un ulteriore ensemble.
+
+I comandi seguenti descrivono invece
+la precedente prova `aug_sporcate_v2` e richiedono i suoi sorgenti originali per
+superare i controlli delle impronte.
+
+Attiva l'ambiente `mtah` prima di avviare il comando, così Windows trova anche le librerie CUDA dell'ambiente.
+
+```bash
+conda activate mtah
+python modelli_mv/prova_augmentation.py --nome aug_sporcate_v2
+```
+
+Il confronto legge **esclusivamente gli ATD sporcati** in
+`data/altre_partite/<fonte>_sporcate/<id>/`. Dalle cartelle `_pulite` legge soltanto
+`<id>_possession_gt.csv`, mai le coordinate pulite. Questo vale per tutte le 30 partite.
+È una scelta di questo esperimento, non una restrizione del regolamento:
+si possono usare le coordinate pulite esterne per generare nuovi input sporcati.
+La vista chiamata `originale` è quindi **la sporcata di partenza**, senza ulteriori perturbazioni.
+Per ogni partita calcola le feature su questa vista, su una vista con buchi contigui della palla e
+di singoli giocatori e su una vista con errore di posizione della palla correlato nel tempo. Durata dei
+buchi ed entità dell'errore dipendono dalle osservazioni nel tracking esterno. Una quarta vista combina
+le perturbazioni con un seme distinto e serve allo stress test. L'augmentation preserva etichette,
+frame, tempi e squadre. Barça–Athletic e i cinque minuti pubblici restano fuori dalla procedura.
+La corrispondenza delle perturbazioni con una distribuzione di errori realistica
+non è stata dimostrata; aggiungerle al tracking già sporcato può alterare la
+distribuzione del training rispetto al benchmark.
+
+Le quattro ricette confrontano la base, le perturbazioni del tracking, il campionamento del 25% dei crop
+della rete intorno alle transizioni e la combinazione. Quando sono attive le perturbazioni, ogni riga
+HGB o crop della rete sceglie una delle tre viste di training con probabilità 50%, 25% e 25%. Una vista
+sostituisce quella originale nello stesso budget di campionamento. I pesi delle fonti sono definiti in
+`constants.SOURCE_WEIGHTS` e valgono per tutti i modelli del confronto.
+
+Per ciascuno dei cinque fold, il gruppo successivo è riservato all'early stopping di HGB e alla taratura
+del Viterbi. **Ogni ricetta calibra il proprio Viterbi**, soltanto sulla vista sporcata di partenza
+delle DFL e Metrica di calibrazione. Training, calibrazione e test non condividono partite.
+Questo lascia in media 18 partite per il training e soltanto 1–3 DFL/Metrica
+per calibrare ciascun decoder, con variabilità elevata dei parametri scelti.
+Il confronto non isola le cause dello scarto rispetto al congelato, allenato
+su una media di 24 partite per fold: include anche modifiche a feature e rete.
+L'obiettivo è la media per partita DFL + Metrica, con soglia macroF1 di 0,90, e poi spellF1.
+La vista stressata è diagnostica e non determina parametri o vincitore. Il test comprende
+la vista originale e quella stressata di ogni partita fuori dal training e dalla calibrazione.
+Il riepilogo riporta lo SpellF1 medio per partita, il macroF1 e, a IoU 0,50, la precisione su tutti i
+possessi e il recall su quelli sotto due secondi. I CSV fuori gruppo vengono esportati automaticamente
+in `data/risultati_esterne/<nome>__<ricetta>/` e appaiono nella dashboard `/esterne`.
+Il riferimento congelato proviene da un altro protocollo: per misurare l'effetto dell'augmentation
+confrontare soprattutto le quattro ricette di **questo stesso esperimento**.
+La selezione della ricetta usa questa cross-validation di sviluppo; i punteggi non sono una stima
+su un ulteriore test indipendente dalla selezione.
+
+I risultati e i pesi dei fold sono in `data/cache_mv/augmentation_runs/<nome>/`. Ripetere il comando con
+lo stesso nome e la stessa configurazione riprende dai pesi o dai fold già salvati. Input, codice,
+versioni e artefatti completati sono identificati da impronte SHA-256. Le vecchie cache, costruite
+sul tracking pulito, non vengono riusate. Un cambiamento di configurazione richiede un nuovo nome.
+Per un controllo rapido del percorso completo si può usare
+`--nome aug_sporcate_smoke_v2 --fold 0 --n-reti 1 --epoche 1 --smoke`.
+Gli esperimenti smoke non possono generare il modello finale.
+
+I nuovi training includono il contesto dei crop senza assegnargli loss e tengono separate le
+interruzioni osservabili del tracking; tutte le ricette usano gli stessi controlli e la stessa rete.
+I checkpoint precedenti mantengono la modalità di inferenza e le feature legacy.
+
+Per verificare dati, cache e risultati:
+
+```bash
+python -m unittest discover -s tests -v
+python modelli_mv/valida_augmentation.py --ricomputa
+python modelli_mv/valida_risultati_augmentation.py --esperimento aug_sporcate_v2
+```
+
+`valida_augmentation.py` controlla le 120 viste delle 30 partite, le etichette,
+la provenienza e l'assenza di Inf; `--ricomputa` richiede anche uguaglianza esatta
+con le feature ricostruite dagli ATD sporcati. Il report è
+`data/cache_mv/validazione_augmentation.json`.
+`valida_risultati_augmentation.py` verifica i manifest e ricalcola le metriche
+dei CSV con il validatore ufficiale e le funzioni della dashboard. Il report è
+`data/cache_mv/augmentation_runs/aug_sporcate_v2/validazione_risultati.json`.
+Con `--modelli <nome1> <nome2>` verifica anche la rigenerazione identica dei CSV
+finali, senza leggere la ground truth pubblica. Il controllo pubblico richiede
+`--pubblico` esplicito e non deve guidare scelte successive.
+
+### Modello finale con augmentation per Barça–Athletic
+
+Dopo il confronto completo, esegui nell'ambiente `mtah`:
+
+```bash
+python modelli_mv/finale_augmentation.py --esperimento aug_sporcate_v2 --modo combinato
+```
+
+In questo confronto `combinato` è la ricetta selezionata sulle partite esterne.
+Per un nuovo artefatto, omettendo `--modo`, la selezione è automatica e usa soltanto
+i risultati esterni. Il comando calibra il Viterbi sulle
+predizioni fuori gruppo DFL + Metrica, poi allena HGB e le reti sulle 30 partite sporcate.
+Non forza più la ricetta combinata. Il numero di iterazioni HGB è la mediana dei cinque
+modelli HGB della ricetta scelta. A pesi e parametri fissati, scrive
+`evaluation/results/aug_sporcate_v2__<ricetta>.csv`. Il punteggio pubblico viene riportato
+solo a questo punto e non deve essere usato per modificare o scegliere il modello.
+
+Per fissare esplicitamente una ricetta già valutata usare `--modo combinato` (o `base`, `tracking`,
+`transizioni`). `--nome <nome_nuovo>` permette di nominare l'artefatto; `--solo-allena` ferma il comando
+prima di leggere la partita di gara. I CSV esterni conservano sempre il Viterbi del rispettivo fold,
+mai quello finale calibrato su tutte le predizioni OOF.
+
+I quattro artefatti della prova completata sono stati finalizzati con `--modo` esplicito.
+La ripresa richiede la stessa scelta; per rigenerare soltanto un CSV dai pesi già pronti
+usare `riproduci.py prevedi`, senza rilanciare l'addestramento finale.
+
+Risultati verificati del confronto completo (media delle dieci sporcate):
+
+| ricetta | spellF1 | macroF1 |
+|---|---:|---:|
+| base | 72,05 | 93,46 |
+| tracking | 71,96 | 93,34 |
+| transizioni | 71,93 | 93,42 |
+| combinato | 72,39 | 93,48 |
+
+120 viste ricomputate esattamente, 40 CSV esterni validati, quattro CSV finali riproducibili
+SHA-256 e 46 test superati. Il guadagno del combinato è piccolo (+0,34 punti spellF1),
+non una dimostrazione di miglioramento robusto. Dettagli e controllo pubblico finale in
+[`changelog.md`](../changelog.md).
+
+I pesi sono in `data/cache_mv/modelli/aug_sporcate_v2__<ricetta>/`, con ricetta, provenienza,
+manifest degli artefatti e benchmark esterno. Per rigenerare il CSV, sostituire `<ricetta>`:
+
+```bash
+python modelli_mv/riproduci.py prevedi --modello aug_sporcate_v2__<ricetta>
+```
 
 ## Cosa va su GitHub e cosa no
 

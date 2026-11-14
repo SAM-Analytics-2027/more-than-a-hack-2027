@@ -37,7 +37,7 @@ def folds(items):
     """Gruppi di partite intere, con le fonti distribuite in modo uniforme."""
     out = {}
     for src in dati.SOURCES:
-        ids = [it for it in items if it[0] == src]
+        ids = sorted(it for it in items if it[0] == src)
         rng = np.random.default_rng(SEED)
         rng.shuffle(ids)
         for i, it in enumerate(ids):
@@ -79,7 +79,7 @@ TV_WEIGHT = 1.0        # peso dei frame SkillCorner in allenamento (1/4 = valgon
 
 
 def training_rows(df, cols, swap=True):
-    keep = (df['y'].values < 3) & (df['period'].values > 0)
+    keep = df['y'].isin((0, 1, 2)).values & df['period'].isin((1, 2)).values
     w_all = short_spell_weights(df['y'].values, df['period'].values) if WEIGHTS else np.ones(len(df), np.float32)
     sub = df.loc[keep].iloc[::STEP]
     w = w_all[keep][::STEP]
@@ -100,9 +100,20 @@ def make_model():
 def predict_sym(model, df, cols):
     """Media della previsione diretta e di quella a squadre scambiate (rimesse a posto)."""
     X = df[cols]
-    p1 = model.predict_proba(X)
-    p2 = model.predict_proba(C.swap_teams(X)[cols])[:, [1, 0, 2]]
+    p1 = aligned_proba(model, X)
+    p2 = aligned_proba(model, C.swap_teams(X)[cols])[:, [1, 0, 2]]
     return (p1 + p2) / 2
+
+
+def aligned_proba(model, x):
+    """Keep H/A/D column order even when a small training set lacks a class."""
+    raw = model.predict_proba(x)
+    classes = np.asarray(model.classes_)
+    if not np.isin(classes, (0, 1, 2)).all():
+        raise ValueError('Classi del modello diverse da H/A/D')
+    result = np.zeros((len(x), 3), dtype=raw.dtype)
+    result[:, classes.astype(int)] = raw
+    return result
 
 
 def add_source_flag(data):
@@ -204,7 +215,7 @@ def evaluate(oof, data_meta, params, items):
     for it in items:
         y, per, nd, ev = data_meta[it]
         pred = M.decode(oof[it], per, nd, params, ev)
-        out[it] = M.score(y, pred)
+        out[it] = M.score_periods(y, pred, per)
     return out
 
 
@@ -216,13 +227,19 @@ def summary(scores):
     return float(np.mean(list(per_src.values()))), per_src
 
 
-def tune(oof, data_meta, items, start=None, rounds=2):
+def tune(oof, data_meta, items, start=None, rounds=2, aggregation='matches'):
     """Ricerca per coordinate: un parametro alla volta, il valore migliore, poi il giro successivo.
 
-    Obiettivo: media delle tre fonti (ogni fonte pesa uguale, non ogni partita).
+    Obiettivo predefinito: media per partita, come la dashboard DFL + Metrica.
+    aggregation='sources' è disponibile per riprodurre gli esperimenti storici.
     """
     params = dict(start or DEFAULT)
-    best, _ = summary(evaluate(oof, data_meta, params, items))
+    if not items or aggregation not in ('matches', 'sources'):
+        raise ValueError('Servono partite di calibrazione e una aggregazione valida')
+    def objective(candidate):
+        scores = evaluate(oof, data_meta, candidate, items)
+        return float(np.mean(list(scores.values()))) if aggregation == 'matches' else summary(scores)[0]
+    best = objective(params)
     grid = dict(GRID)
     if any(data_meta[it][3] is not None for it in items):
         grid['w_ev'] = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
@@ -231,7 +248,7 @@ def tune(oof, data_meta, items, start=None, rounds=2):
         for key, values in grid.items():
             for v in values:
                 trial = dict(params, **{key: v})
-                s, _ = summary(evaluate(oof, data_meta, trial, items))
+                s = objective(trial)
                 if s > best + 1e-6:
                     best, params = s, trial
         print('  giro {}: {:.4f} {}'.format(r + 1, best, params), flush=True)

@@ -24,7 +24,7 @@ from constants import H, A, D, X, INF_COST as INF, PROB_CLIP_MIN, EVENT_PROB_CLI
 # Decodificatore
 # --------------------------------------------------------------------------------------------------
 
-@njit
+@njit(cache=True)
 def _viterbi(cost, pen_t, m_pos, m_dead, m_pre, pen_pre):
     """cost (T, 3): costo di ogni stato in ogni frame. pen_t (T, 3, 3): costo di passare da uno stato all'altro
     entrando nel frame t (può cambiare frame per frame).
@@ -42,7 +42,7 @@ def _viterbi(cost, pen_t, m_pos, m_dead, m_pre, pen_pre):
     INF = 1e18
     dp = np.full(K, INF)
     nxt = np.full(K, INF)
-    bp = np.zeros((T, K), dtype=np.int16)
+    bp = np.zeros((T, K), dtype=np.int32)
     for s in range(3):
         dp[off[s]] = cost[0, s]
         dp[off[s] + m[s] - 1] = cost[0, s]          # si può anche partire "a metà" di un possesso
@@ -76,7 +76,7 @@ def _viterbi(cost, pen_t, m_pos, m_dead, m_pre, pen_pre):
             # l'ultimo sottostato può anche restare
             k = off[s] + m[s] - 1
             stay = dp[k] + cost[t, s]
-            if m[s] == 1 or stay < nxt[k]:
+            if stay < nxt[k]:
                 nxt[k] = stay
                 bp[t, k] = k
         for k in range(K):
@@ -124,17 +124,32 @@ def decode(proba, period, no_data, params, events=None):
     params: turn, stop, rest (costi dei cambi), m_pos, m_dead (durate minime in frame), bias_d (spinta verso D),
     w_ev (peso degli eventi, se ci sono), m_pre e pen_pre (regola prima delle pause).
     """
+    proba = np.asarray(proba)
+    period = np.asarray(period)
+    no_data = np.asarray(no_data, dtype=bool)
+    if period.ndim != 1 or proba.shape != (len(period), 3) or no_data.shape != period.shape:
+        raise ValueError('proba deve essere (T, 3), period e no_data devono essere (T,)')
+    if not np.isfinite(proba).all() or np.any(proba < 0) or np.any(proba.sum(axis=1) <= 0):
+        raise ValueError('Probabilità non valide: richiesti valori finiti, non negativi e somma positiva')
+    for key in ('m_pos', 'm_dead', 'm_pre'):
+        value = params.get(key, params['m_pos'])
+        if not np.isfinite(value) or int(value) != value or value < 1:
+            raise ValueError('{} deve essere un intero positivo'.format(key))
+    if any(not np.isfinite(value) for value in params.values()):
+        raise ValueError('I parametri del decodificatore devono essere finiti')
+    if events is not None and (np.shape(events) != (len(period), 4) or not np.isfinite(events).all()):
+        raise ValueError('events deve contenere probabilità finite con forma (T, 4)')
     p = np.clip(proba, PROB_CLIP_MIN, 1.0)
     cost = -np.log(p)
     cost[:, D] += params.get('bias_d', 0.0)
     cost[no_data] = 0.0
     pen = penalties(len(period), params, events)
     out = np.full(len(period), X, dtype=np.int8)
-    for half in (1, 2):
-        idx = np.flatnonzero(period == half)
-        if len(idx) == 0:
+    # Never span an interval or a repeated period identifier separated by a gap.
+    cuts = np.r_[0, np.flatnonzero(period[1:] != period[:-1]) + 1, len(period)]
+    for a, b in zip(cuts[:-1], cuts[1:]):
+        if a == b or period[a] not in (1, 2):
             continue
-        a, b = idx[0], idx[-1] + 1
         out[a:b] = _viterbi(np.ascontiguousarray(cost[a:b]), np.ascontiguousarray(pen[a:b]),
                             int(params['m_pos']), int(params['m_dead']),
                             int(params.get('m_pre', params['m_pos'])), float(params.get('pen_pre', 0.0)))
@@ -178,8 +193,25 @@ def spell_f1_fast(gt, pred):
 
 def to_codes(y):
     """Etichette numeriche 0..3 nei codici del punteggio ufficiale (H, A, D, X)."""
+    y = np.asarray(y)
+    if y.ndim != 1 or not np.isin(y, (0, 1, 2, 3)).all():
+        raise ValueError('Le etichette devono essere un vettore di codici 0, 1, 2, 3')
+    y = y.astype(np.int8)
     lut = np.array([pm.H, pm.A, pm.D, pm.X], dtype=np.int8)
     return lut[y]
+
+
+def period_gap(values, period, fill=3):
+    """Insert an ungraded separator at every direct change of playing period."""
+    values, period = np.asarray(values), np.asarray(period)
+    if values.shape[0] != len(period):
+        raise ValueError('Lunghezza valori/periodi diversa')
+    at = np.flatnonzero((period[1:] != period[:-1]) & (period[1:] > 0) & (period[:-1] > 0)) + 1
+    return np.insert(values, at, fill, axis=0)
+
+
+def score_periods(y_true, y_pred, period, full=False):
+    return score(period_gap(y_true, period), period_gap(y_pred, period), full=full)
 
 
 def score(y_true, y_pred, full=False):

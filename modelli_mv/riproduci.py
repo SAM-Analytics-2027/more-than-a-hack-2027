@@ -42,7 +42,7 @@ from constants import (  # noqa: E402
     SEED,
     N_NETS,
     TV_WEIGHT,
-    VITERBI_PARAMS_FROZEN as START,
+    VITERBI_SEARCH_START as START,
     DM_SOURCES as DM,
     LETTERS,
     DECIMALS,
@@ -74,7 +74,10 @@ def _versions():
 
 def _write_csv(path, codes):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    pd.DataFrame({'frame': np.arange(len(codes)), 'label': LETTERS[codes]}).to_csv(path, index=False, lineterminator='\n')
+    M.to_codes(codes)
+    tmp = path + '.{}.tmp'.format(os.getpid())
+    pd.DataFrame({'frame': np.arange(len(codes)), 'label': LETTERS[codes]}).to_csv(tmp, index=False, lineterminator='\n')
+    os.replace(tmp, path)
     return _sha256(path)
 
 
@@ -84,11 +87,11 @@ def _write_csv(path, codes):
 
 def check(write=False, only_barca=False):
     ok = True
-    print('1. Versioni (modelli_mv/requirements.txt)')
+    print('1. Versioni (requirements.txt)')
     if not platform.python_version().startswith('3.11.'):
         print('   ATTENZIONE python {}: serve 3.11'.format(platform.python_version()))
         ok = False
-    for line in open(os.path.join(HERE, 'requirements.txt'), encoding='utf-8'):
+    for line in open(os.path.join(os.path.dirname(HERE), 'requirements.txt'), encoding='utf-8'):
         line = line.split('#')[0].strip()
         if '==' not in line:
             continue
@@ -150,7 +153,7 @@ def fit_components(data, items, cols, folder, net_seeds):
     for s, seed in enumerate(net_seeds):
         rete.save(rete.train(data, items, cols, seed, dev=dev), os.path.join(folder, 'rete_seme{}.pt'.format(s)))
     json.dump({'partite': ['{}/{}'.format(*it) for it in items], 'semi_rete': [int(s) for s in net_seeds],
-               'colonne': list(cols), 'dispositivo_allenamento': str(dev)},
+               'colonne': list(cols), 'dispositivo_allenamento': str(dev), 'feature_version': 2},
               open(os.path.join(folder, 'modello.json'), 'w'), indent=1)
     print('   {}: HGB {} iterazioni + {} reti, {:.0f} s'.format(os.path.relpath(folder, ROOT), hgb.n_iter_,
                                                               len(net_seeds), time.time() - t), flush=True)
@@ -163,6 +166,12 @@ def load_components(folder):
     hgb = joblib.load(os.path.join(folder, 'hgb.joblib'))
     nets = [rete.load(os.path.join(folder, 'rete_seme{}.pt'.format(s))) for s in range(len(info['semi_rete']))]
     return hgb, nets, info['colonne']
+
+
+def legacy_features(root, folder='finale'):
+    with open(os.path.join(root, folder, 'modello.json'), encoding='utf-8') as f:
+        info = json.load(f)
+    return info.get('feature_version', 1) < 2
 
 
 def ensemble_proba(components, df, it):
@@ -204,28 +213,32 @@ def _public_window(codes):
     return {'spellF1': round(float(r['spell_f1_mean']), 4), 'macroF1': round(float(r['macro_f1']), 4)}
 
 
-def predict(root=FROZEN, name=NAME, write=False):
+def predict(root=FROZEN, name=NAME, write=False, report_public=True):
     t = time.time()
     for f in dati.input_files(dati.BARCA):
         if not os.path.exists(os.path.join(dati.C.fc.DATA_DIR, f)):
             sys.exit('manca data/{}: servono i file della gara in data/tactical/'.format(f))
-    target = dati.table(dati.BARCA)                  # sempre ricalcolate: mai da una cache vecchia
+    target = dati.table(dati.BARCA, legacy=legacy_features(root))
     target['fonte_tv'] = np.float32(0)              # il Barça ha una telecamera tattica, non le riprese tv
     proba = ensemble_proba(load_components(os.path.join(root, 'finale')), target, dati.BARCA)
     codes = _decode(proba, target, _params(root))
     out = os.path.join(RESULTS, name + '.csv')
     got = {'csv_sha256': _write_csv(out, codes),
            'conteggi': {k: int((LETTERS[codes] == k).sum()) for k in 'HADX'},
-           'possessi': _possessions(codes, target['period'].values),
-           'finestra_pubblica': _public_window(codes)}
+           'possessi': _possessions(codes, target['period'].values)}
+    if report_public:
+        got['finestra_pubblica'] = _public_window(codes)
     valid = subprocess.run([sys.executable, os.path.join(ROOT, 'evaluation', 'validate_submission.py'), out],
                            capture_output=True, text=True)
+    if valid.returncode:
+        raise ValueError('Submission non valida: ' + valid.stdout + valid.stderr)
     print('Barça: scritto {} ({:.0f} s), formato {}'.format(os.path.relpath(out, ROOT), time.time() - t,
                                                            'valido' if valid.returncode == 0 else 'NON VALIDO'))
     print('   possessi {}  conteggi {}'.format(got['possessi'], got['conteggi']))
-    print('   5 minuti pubblici (prima pagina della dashboard): spellF1 {spellF1}  macroF1 {macroF1}'.format(
-        **got['finestra_pubblica']))
-    _compare('attesi.json', got, write, root, ('possessi', 'conteggi', 'finestra_pubblica'))
+    if report_public:
+        print('   5 minuti pubblici (controllo finale, mai selezione): spellF1 {spellF1}  macroF1 {macroF1}'.format(
+            **got['finestra_pubblica']))
+    _compare('attesi.json', got, write, root, tuple(got.keys() - {'csv_sha256'}))
     return got
 
 
@@ -265,8 +278,9 @@ def _scores(oof, data, params):
 
 def external(root=FROZEN, name=NAME, write=False, oof=None):
     t = time.time()
-    dati.build_all()
-    data = E.add_source_flag(dati.load_all())
+    legacy = legacy_features(root, os.path.join('gruppi', 'gruppo0'))
+    dati.build_all(legacy=legacy)
+    data = E.add_source_flag(dati.load_all(legacy=legacy))
     oof = oof or _external_proba(root, data)
     params = _params(root)
     hashes, per_match = {}, {}
@@ -325,6 +339,8 @@ def _tune(oof, data, items):
 
 def model_dir(name):
     """Dove stanno i pesi di una prova: data/cache_mv/modelli/<nome> (il riferimento sta in modelli_mv/congelato)."""
+    if not name or not all(c.isalnum() or c in '_-' for c in name):
+        raise ValueError('Nome modello non valido: usare lettere, numeri, _ e -')
     return FROZEN if name == NAME else os.path.join(dati.CACHE, 'modelli', name)
 
 

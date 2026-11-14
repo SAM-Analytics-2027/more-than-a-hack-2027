@@ -167,6 +167,7 @@ META = ('frame', 'period', 'y')
 # Pesandole 0.25, contano complessivamente quanto 5 partite tattiche, evitando che il rumore televisivo
 # sovrasti il segnale pulito delle 10 partite DFL + Metrica.
 TV_WEIGHT = 0.25
+SOURCE_WEIGHTS = {'dfl': 1.0, 'metrica': 1.0, 'skillcorner': TV_WEIGHT}
 
 # Ponderazione basata sulla durata dei possessi (`short_spell_weights`):
 # Assegna un peso w = sqrt(mediana_durata / durata_possesso), limitato nell'intervallo [1/3, 3.0].
@@ -333,10 +334,12 @@ EVENT_PROB_CLIP_MIN = 1e-3
 DEFAULT = dict(turn=6.0, stop=6.0, rest=6.0, m_pos=20, m_dead=40, bias_d=0.0)
 DEFAULT_VITERBI_PARAMS = DEFAULT
 
-# Parametri ottimali del decodificatore di Viterbi per il modello finale `mv_hgb_rete3`:
-# Ottenuti tramite ricerca per coordinate (2 round) ottimizzando lo spellF1 sulle 10 partite DFL + Metrica.
+# Punto iniziale della ricerca per coordinate, non i parametri del congelato.
 START = dict(turn=9.0, stop=13.0, rest=9.0, m_pos=5, m_dead=60, bias_d=-0.5)
-VITERBI_PARAMS_FROZEN = START
+VITERBI_SEARCH_START = START
+# Copia documentale dei parametri congelati. L'inferenza carica sempre il JSON
+# dell'artefatto; non usare questo riferimento per calibrare una nuova prova.
+VITERBI_PARAMS_FROZEN = dict(turn=9.0, stop=4.0, rest=9.0, m_pos=5, m_dead=60, bias_d=-0.5)
 
 # Griglia di ricerca per l'ottimizzazione per coordinate del decodificatore di Viterbi (esperimento.py).
 GRID = {

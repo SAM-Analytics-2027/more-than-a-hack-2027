@@ -32,18 +32,29 @@ from constants import (  # noqa: E402
 # Strumenti
 # --------------------------------------------------------------------------------------------------
 
-def _speed(a, period):
+def _speed(a, period, *, legacy=False):
     """Velocità (m/s) da differenze centrate su ±SPEED_HALF frame, NaN se manca un estremo o cambia tempo."""
     k = SPEED_HALF
     out = np.full(a.shape, np.nan, dtype=np.float32)
     if a.shape[0] <= 2 * k:
         return out
     same = (period[2 * k:] == period[:-2 * k]) & (period[2 * k:] > 0)
+    if not legacy:
+        # Endpoints can belong to the same half while the interval crosses a
+        # replay or a missing/reassigned player slot. Such velocities are unknown.
+        changes = np.r_[0, np.cumsum(period[1:] != period[:-1])]
+        same &= changes[2 * k:] == changes[:-2 * k]
+        finite = np.isfinite(a)
+        missing = np.concatenate((np.zeros_like(a[:1], dtype=np.int32),
+                                  np.cumsum(~finite, axis=0, dtype=np.int32)))
+        continuous = missing[2 * k + 1:] == missing[:-2 * k - 1]
     d = (a[2 * k:] - a[:-2 * k]) * (FPS / (2.0 * k))
     if d.ndim == 2:
         d[~same] = np.nan
     else:
         d = np.where(same, d, np.nan)
+    if not legacy:
+        d = np.where(continuous, d, np.nan)
     out[k:-k] = d
     return out
 
@@ -181,6 +192,9 @@ def attack_sign(match):
             continue
         h = px[rows][:, team == 0]
         a = px[rows][:, team == 1]
+        if h.shape[1] == 0 or a.shape[1] == 0:
+            signs[half] = 1.0
+            continue
         with np.errstate(all='ignore'):
             import warnings
             with warnings.catch_warnings():
@@ -195,12 +209,23 @@ def attack_sign(match):
 # Caratteristiche
 # --------------------------------------------------------------------------------------------------
 
-def features(match):
+def features(match, *, legacy=False):
     """DataFrame (frame × caratteristiche) in float32. Casa attacca sempre verso x positive."""
     import warnings
-    warnings.simplefilter('ignore', category=RuntimeWarning)
+    # Missing tracking is expected; do not change the caller's warning filters.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=RuntimeWarning)
+        return _features(match, legacy=legacy)
+
+
+def _features(match, *, legacy=False):
 
     period = match['period']
+    if not legacy:
+        period = np.asarray(period).copy()
+        players_seen = (np.isfinite(match['px']) & np.isfinite(match['py'])).any(axis=1)
+        ball_seen = np.isfinite(match['bx']) & np.isfinite(match['by'])
+        period[~players_seen & ~ball_seen] = 0
     T = len(period)
     L, W = float(match['length']), float(match['width'])
     signs = attack_sign(match)
@@ -215,30 +240,31 @@ def features(match):
     team = match['team']
     H, A = team == 0, team == 1
     segs = _segments(period)
+    speed = lambda values: _speed(values, period, legacy=legacy)
 
     f = {}
-    vis = ~np.isnan(bx)
+    vis = ~np.isnan(bx) if legacy else np.isfinite(bx) & np.isfinite(by)
     f['palla_vista'] = vis.astype(np.float32)
     f['bx'] = bx
     f['by_abs'] = np.abs(by)
     f['dist_linea_fondo'] = L / 2 - np.abs(bx)
     f['dist_linea_lato'] = W / 2 - np.abs(by)
     f['palla_fuori'] = np.where(vis, ((np.abs(bx) > L / 2 + FIELD_BOUND_TOLERANCE) | (np.abs(by) > W / 2 + FIELD_BOUND_TOLERANCE)).astype(np.float32), np.nan)
-    bvx, bvy = _speed(bx, period), _speed(by, period)
+    bvx, bvy = speed(bx), speed(by)
     bspeed = np.hypot(bvx, bvy)
     f['palla_vel'] = bspeed
     f['palla_vx'] = bvx
     # accelerazione: cambio di velocità su ±2 frame (calci, tocchi, rimbalzi)
-    f['palla_acc'] = np.hypot(_speed(bvx, period), _speed(bvy, period))
+    f['palla_acc'] = np.hypot(speed(bvx), speed(bvy))
     since, until = _gap_position(vis, segs)
     f['da_ultima_palla'] = since
     f['a_prossima_palla'] = until
     f['buco_palla'] = since + until
 
     # giocatori
-    vx, vy = _speed(px, period), _speed(py, period)
+    vx, vy = speed(px), speed(py)
     sp = np.hypot(vx, vy)
-    seen = ~np.isnan(px)
+    seen = ~np.isnan(px) if legacy else np.isfinite(px) & np.isfinite(py)
     f['n_casa'] = seen[:, H].sum(1).astype(np.float32)
     f['n_ospiti'] = seen[:, A].sum(1).astype(np.float32)
     f['vel_media'] = np.nanmean(sp, axis=1)
@@ -255,8 +281,8 @@ def features(match):
         f['cy_' + name] = np.nanmean(y, axis=1)
         f['sx_' + name] = np.nanstd(x, axis=1)
         f['sy_' + name] = np.nanstd(y, axis=1)
-        f['xmin_' + name] = np.nanmin(x, axis=1)
-        f['xmax_' + name] = np.nanmax(x, axis=1)
+        f['xmin_' + name] = _nanmin_rows(x)
+        f['xmax_' + name] = -_nanmin_rows(-x)
         f['vx_' + name] = np.nanmean(vx[:, m], axis=1)
     f['cx_diff'] = f['cx_casa'] - f['cx_ospiti']
     f['vx_diff'] = f['vx_casa'] - f['vx_ospiti']
@@ -267,8 +293,10 @@ def features(match):
     ax = np.where(np.isnan(px[:, A]), -np.inf, px[:, A])
     hsorted = np.sort(hx, axis=1)
     asorted = -np.sort(-ax, axis=1)
-    f['linea_casa'] = np.where(np.isfinite(hsorted[:, 1]), hsorted[:, 1], np.nan)
-    f['linea_ospiti'] = np.where(np.isfinite(asorted[:, 1]), asorted[:, 1], np.nan)
+    f['linea_casa'] = (np.where(np.isfinite(hsorted[:, 1]), hsorted[:, 1], np.nan)
+                       if hsorted.shape[1] > 1 else np.full(T, np.nan, np.float32))
+    f['linea_ospiti'] = (np.where(np.isfinite(asorted[:, 1]), asorted[:, 1], np.nan)
+                         if asorted.shape[1] > 1 else np.full(T, np.nan, np.float32))
 
     # palla e giocatori
     d = np.hypot(px - bx[:, None], py - by[:, None])
@@ -282,8 +310,9 @@ def features(match):
     f['vicini_ospiti'] = np.where(vis, (d[:, A] < NEAR).sum(1), np.nan).astype(np.float32)
     closest_home = np.where(np.isnan(dH) | np.isnan(dA), np.nan, (dH < dA) + 0.5 * (dH == dA)).astype(np.float32)
     # quando la palla manca: distanza dall'ultima posizione vista (la palla non si teletrasporta)
-    bx_ff = pd.Series(bx).groupby(period).ffill().to_numpy(np.float32)
-    by_ff = pd.Series(by).groupby(period).ffill().to_numpy(np.float32)
+    groups = period if legacy else np.r_[0, np.cumsum(period[1:] != period[:-1])]
+    bx_ff = pd.Series(bx).groupby(groups).ffill().to_numpy(np.float32)
+    by_ff = pd.Series(by).groupby(groups).ffill().to_numpy(np.float32)
     dff = np.hypot(px - bx_ff[:, None], py - by_ff[:, None])
     f['dff_casa'] = _nanmin_rows(dff[:, H])
     f['dff_ospiti'] = _nanmin_rows(dff[:, A])
@@ -292,11 +321,14 @@ def features(match):
     # velocità del giocatore più vicino di ogni squadra (chi conduce va piano con la palla vicina)
     dH_full = np.where(np.isnan(d[:, H]), np.inf, d[:, H])
     dA_full = np.where(np.isnan(d[:, A]), np.inf, d[:, A])
-    iH, iA = dH_full.argmin(1), dA_full.argmin(1)
+    iH = dH_full.argmin(1) if dH_full.shape[1] else np.zeros(T, dtype=int)
+    iA = dA_full.argmin(1) if dA_full.shape[1] else np.zeros(T, dtype=int)
     spH, spA = sp[:, H], sp[:, A]
     r = np.arange(T)
-    f['vel_vicino_casa'] = np.where(np.isnan(dH), np.nan, spH[r, iH])
-    f['vel_vicino_ospiti'] = np.where(np.isnan(dA), np.nan, spA[r, iA])
+    f['vel_vicino_casa'] = (np.where(np.isnan(dH), np.nan, spH[r, iH])
+                           if spH.shape[1] else np.full(T, np.nan, np.float32))
+    f['vel_vicino_ospiti'] = (np.where(np.isnan(dA), np.nan, spA[r, iA])
+                             if spA.shape[1] else np.full(T, np.nan, np.float32))
 
     # tocchi: palla vista entro TOUCH metri da un giocatore. Le regole parlano di controllo
     # ("tiene la palla qualche secondo", "più di due passaggi di fila"): servono chi ha toccato per ultimo,
@@ -314,6 +346,9 @@ def features(match):
     starts = np.zeros(T, dtype=np.float32)            # inizio di una serie di tocchi (un passaggio ricevuto)
     starts[1:] = (touch[1:] != 0) & (touch[1:] != touch[:-1])
     starts[0] = touch[0] != 0
+    if not legacy:
+        for a, _ in segs:
+            starts[a] = touch[a] != 0
     for w in TOUCH_COUNT_WINDOWS:
         f['tocchi_casa_p{}'.format(w)] = _window_sum(starts * (touch > 0), segs, w, 0)
         f['tocchi_ospiti_p{}'.format(w)] = _window_sum(starts * (touch < 0), segs, w, 0)
@@ -341,7 +376,7 @@ def features(match):
     for k in list(f):
         f[k] = np.asarray(f[k], dtype=np.float32)
     df = pd.DataFrame(f)
-    df.loc[period == 0, :] = np.nan
+    df.loc[match['period'] == 0, :] = np.nan
     return df
 
 
