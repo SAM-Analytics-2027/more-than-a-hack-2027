@@ -202,16 +202,15 @@ THREADS = 8
 # 4. ARCHITETTURA E IPERPARAMETRI DELLA RETE NEURALE (rete.py)
 # ==================================================================================================
 
-# Passo di decimazione temporale della sequenza per la rete neurale convoluzionale:
-# 5 frame al secondo (passo 0.2 s). La rete lavora a 5 Hz invece di 25 Hz per efficienza
-# e le previsioni vengono poi interpolate linearmente a 25 fps.
-STRIDE = 5
-NET_STRIDE = 5
+# Passo di campionamento temporale della sequenza per la rete neurale convoluzionale:
+# 25 frame al secondo (passo nativo 0.040 s, STRIDE = 1). La rete analizza tutti i frame
+# a 25 Hz senza interpolazione o sfocatura temporale.
+STRIDE = 1
+NET_STRIDE = 1
 
-# Lunghezza della sequenza di addestramento (crop temporale):
-# 300 step a 5 fps = 60 secondi esatti di partita continua.
-CROP = 300
-NET_CROP = 300
+# 1500 step a 25 fps = 60 secondi esatti di partita continua.
+CROP = 1500
+NET_CROP = 1500
 
 # Numero di epoche di addestramento per ciascuna rete neurale (default: 20 epoche).
 EPOCHS = 20
@@ -221,11 +220,11 @@ NET_EPOCHS = 20
 CHANNELS = 96
 NET_CHANNELS = 96
 
-# Dilatazioni temporali dei 7 blocchi convoluzionali residui:
-# Dilatazioni: 1, 2, 4, 8, 16, 32, 64 passi.
-# Campo ricettivo risultante: ±(1 + 2 + 4 + 8 + 16 + 32 + 64) = ±127 passi a 5 fps,
-# ovvero esattamente ±25.4 secondi di contesto temporale (passato e futuro) attorno a ciascun frame.
-DILATIONS = (1, 2, 4, 8, 16, 32, 64)
+# Dilatazioni temporali dei 10 blocchi convoluzionali residui:
+# Dilatazioni: 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 passi.
+# Campo ricettivo risultante: ±(1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512) = ±1023 passi a 25 fps,
+# ovvero esattamente ±40.92 secondi di contesto temporale (passato e futuro) attorno a ciascun frame.
+DILATIONS = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
 NET_DILATIONS = DILATIONS
 
 # Dropout applicato all'interno di ciascun blocco residuo per prevenire l'overfitting.

@@ -24,8 +24,8 @@ import caratteristiche as C  # noqa: E402
 import esperimento as E  # noqa: E402
 import constants as K  # noqa: E402
 
-STRIDE = K.STRIDE        # 5 frame al secondo: la rete guarda la sequenza a 0,2 s di passo
-CROP = K.CROP            # tratti di 60 s per allenare
+STRIDE = K.STRIDE        # 25 frame al secondo: la rete guarda la sequenza a risoluzione nativa (STRIDE = 1)
+CROP = K.CROP            # tratti di 60 s per allenare (1500 frame a 25 fps)
 EPOCHS = int(os.environ.get('MV_EPOCHS', K.EPOCHS))
 TV_WEIGHT = K.TV_WEIGHT  # peso dei frame SkillCorner
 
@@ -55,11 +55,12 @@ class Block(nn.Module):
 
 
 class Net(nn.Module):
-    """Rete convoluzionale non causale: ogni momento vede ±127 passi (±25 s) intorno a sé."""
-    def __init__(self, n_in, c=K.CHANNELS):
+    """Rete convoluzionale non causale: ogni momento vede ±1023 passi (±40.9 s) intorno a sé."""
+    def __init__(self, n_in, c=K.CHANNELS, dilations=None):
         super().__init__()
+        self.dilations = tuple(K.DILATIONS if dilations is None else dilations)
         self.inp = nn.Conv1d(n_in, c, 1)
-        self.blocks = nn.Sequential(*[Block(c, d) for d in K.DILATIONS])
+        self.blocks = nn.Sequential(*[Block(c, d) for d in self.dilations])
         self.out = nn.Conv1d(c, 3, 1)
 
     def forward(self, x):
@@ -69,22 +70,22 @@ class Net(nn.Module):
 _RAW = {}
 
 
-def _raw(df, it, cols, *, legacy=False):
-    """Una volta per partita: i frame a 5 al secondo di ogni tempo, diretti e a squadre scambiate (non normalizzati)."""
+def _raw(df, it, cols, *, legacy=False, stride=None):
+    """Una volta per partita: i frame di ogni tempo, diretti e a squadre scambiate (non normalizzati)."""
     # A match name does not identify its data: augmentation views and refreshed
     # caches share it. Do not retain mutable DataFrames in a process-wide cache.
-    return raw_sequences(df, cols, TV_WEIGHT if it[0] == 'skillcorner' else 1.0,
-                         legacy=legacy)
+    return raw_sequences(df, cols, TV_WEIGHT if it[0] == 'skillcorner' else 1.0, legacy=legacy, stride=stride)
 
 
-def raw_sequences(df, cols, source_weight, *, legacy=False):
+def raw_sequences(df, cols, source_weight, *, legacy=False, stride=None):
+    stride = K.STRIDE if stride is None else stride
     per = df['period'].values
     y_all = df['y'].values.astype(np.int64)
     w_all = E.short_spell_weights(df['y'].values, per) * source_weight
     out = []
     if legacy:
         segments = [np.flatnonzero(per == half) for half in (1, 2)]
-        segments = [idx for idx in segments if len(idx) >= CROP * STRIDE]
+        segments = [idx for idx in segments if len(idx) >= CROP * stride]
     else:
         active = per.copy()
         if {'n_casa', 'n_ospiti', 'palla_vista'}.issubset(df.columns):
@@ -93,7 +94,7 @@ def raw_sequences(df, cols, source_weight, *, legacy=False):
             active[empty.to_numpy()] = 0
         segments = [np.arange(a, b) for a, b in C._segments(active)]
     for idx in segments:
-        sel = idx[::STRIDE]
+        sel = idx[::stride]
         sub = df[cols].iloc[sel]
         xo = sub.values.astype(np.float32)
         xs = C.swap_teams(sub)[cols].values.astype(np.float32)
@@ -103,10 +104,10 @@ def raw_sequences(df, cols, source_weight, *, legacy=False):
     return out
 
 
-def _seqs(df, it, cols, med, iqr, swap=False, *, legacy=False):
+def _seqs(df, it, cols, med, iqr, swap=False, *, legacy=False, stride=None):
     """Per ogni tempo: (caratteristiche normalizzate + indicatori dei mancanti, etichette, pesi, frame)."""
     out = []
-    for xo, xs, y, ys, w, sel in _raw(df, it, cols, legacy=legacy):
+    for xo, xs, y, ys, w, sel in _raw(df, it, cols, legacy=legacy, stride=stride):
         x = ((xs if swap else xo) - med) / iqr
         miss = ~np.isfinite(x)
         x[miss] = np.nan
@@ -241,11 +242,12 @@ def predict(model, df, it):
     dev = next(net.parameters()).device
     T = len(df)
     legacy = model.get('inference_version', 1) < 2
+    stride = 5 if legacy else model.get('stride', STRIDE)
     net.eval()
     probs = []
     for swap in (False, True):
         full = np.full((T, 3), 1 / 3, dtype=np.float32)
-        for x, _, _, sel in _seqs(df, it, cols, med, iqr, swap=swap, legacy=legacy):
+        for x, _, _, sel in _seqs(df, it, cols, med, iqr, swap=swap, legacy=legacy, stride=stride):
             with torch.no_grad():
                 p = torch.softmax(net(torch.from_numpy(x[None]).to(dev)), -1)[0].cpu().numpy()
             if swap:
@@ -255,7 +257,7 @@ def predict(model, df, it):
                 # Include the unsampled tail, but never cross a period or a
                 # no-tracking break. Repeat the final probability there.
                 per = df['period'].to_numpy()
-                while b < min(T, sel[-1] + STRIDE) and per[b] == per[a]:
+                while b < min(T, sel[-1] + stride) and per[b] == per[a]:
                     if {'n_casa', 'n_ospiti', 'palla_vista'}.issubset(df.columns):
                         row = df.iloc[b]
                         if not (row['n_casa'] + row['n_ospiti'] > 0 or row['palla_vista'] > 0):
@@ -275,16 +277,25 @@ def save(model, path):
                 'iqr': torch.from_numpy(np.ascontiguousarray(model['iqr'])),
                 'cols': list(model['cols']), 'seed': int(model['seed']),
                 'inference_version': int(model.get('inference_version', 1)),
-                'channels': int(net.inp.out_channels), 'dilations': list(K.DILATIONS)}, path)
+                'channels': int(net.inp.out_channels),
+                'dilations': list(getattr(net, 'dilations', K.DILATIONS)),
+                'stride': int(model.get('stride', K.STRIDE))}, path)
 
 
 def load(path):
     """Il modello salvato, sul processore e in modalità previsione."""
     obj = torch.load(path, map_location='cpu', weights_only=True)
-    if obj.get('dilations', list(K.DILATIONS)) != list(K.DILATIONS):
-        raise ValueError('dilatazioni del checkpoint diverse dalla configurazione della rete')
-    net = Net(obj['n_in'], c=obj.get('channels', K.CHANNELS))
+    if 'dilations' in obj:
+        dilations = obj['dilations']
+    else:
+        n_blocks = max([int(k.split('.')[1]) for k in obj['state_dict'].keys() if k.startswith('blocks.')]) + 1
+        if n_blocks == 7:
+            dilations = (1, 2, 4, 8, 16, 32, 64)
+        else:
+            dilations = tuple(2**i for i in range(n_blocks))
+    net = Net(obj['n_in'], c=obj.get('channels', K.CHANNELS), dilations=dilations)
     net.load_state_dict(obj['state_dict'])
     net.eval()
     return {'net': net, 'med': obj['med'].numpy(), 'iqr': obj['iqr'].numpy(), 'cols': obj['cols'],
-            'seed': obj['seed'], 'inference_version': obj.get('inference_version', 1)}
+            'seed': obj['seed'], 'inference_version': obj.get('inference_version', 1),
+            'stride': obj.get('stride', 5 if obj.get('inference_version', 1) < 2 and len(dilations) == 7 else K.STRIDE)}

@@ -151,6 +151,8 @@ class ControlledComponents(unittest.TestCase):
         self.assertTrue(np.isfinite(xb[0]).all())
         self.assertTrue(np.all(wb[0][:halo] == 0))
         self.assertTrue(np.all(wb[0][halo + 6:] == 0))
+        n_valid = len(df) // K.STRIDE
+        self.assertTrue(np.all(wb[0][halo + n_valid:] == 0))
         self.assertTrue(np.all(yb[0][wb[0] == 0] == K.X))
 
     def test_hgb_requires_explicit_rounds_or_disjoint_matches(self):
