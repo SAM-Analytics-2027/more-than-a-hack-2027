@@ -1,11 +1,11 @@
-"""Le SkillCorner aiutano a generalizzare a una fonte MAI vista? (la situazione del Barça)
+"""Do the SkillCorner matches help to generalise to a NEVER-seen source? (the Barça situation)
 
-Si lascia fuori un'intera fonte e la si usa come prova:
-    prova su DFL:     allenamento su Metrica, con o senza le SkillCorner
-    prova su Metrica: allenamento su DFL,     con o senza le SkillCorner
-Le SkillCorner si provano in tre modi: mescolate alla pari, con la colonna fonte_tv, e con la colonna ma a peso 1/4
-(valgono come 5 partite). Il decodificatore è lo stesso per tutti (parametri di v2_dm); per completezza si riporta
-anche il punteggio con il decodificatore regolato sulla prova stessa, uguale per tutti (un tetto, non un risultato).
+A whole source is left out and used as the test:
+    test on DFL:      training on Metrica, with or without SkillCorner
+    test on Metrica:  training on DFL,     with or without SkillCorner
+SkillCorner is tried in three ways: mixed in at equal weight, with the fonte_tv column, and with the column but at
+weight 1/4 (they count as 5 matches). The decoder is the same for all (parameters of v2_dm); for completeness the
+score with the decoder tuned on the test itself is also reported, the same for all (a ceiling, not a result).
 
     python modelli_mv/fonte_fuori.py
 """
@@ -22,17 +22,17 @@ import dati  # noqa: E402
 import esperimento as E  # noqa: E402
 
 CONFIGS = [
-    ('senza SkillCorner', 0.0, False),
-    ('+ SkillCorner mescolate', 1.0, False),
-    ('+ SkillCorner con colonna', 1.0, True),
-    ('+ SkillCorner con colonna, peso 1/4', 0.25, True),
+    ('without SkillCorner', 0.0, False),
+    ('+ SkillCorner mixed in', 1.0, False),
+    ('+ SkillCorner with column', 1.0, True),
+    ('+ SkillCorner with column, weight 1/4', 0.25, True),
 ]
-PAIRS = [('dfl', 'metrica'), ('metrica', 'dfl')]     # (fonte di prova, fonte di allenamento)
+PAIRS = [('dfl', 'metrica'), ('metrica', 'dfl')]     # (test source, training source)
 
 
 def main():
     data = dati.load_all()
-    params = json.load(open(os.path.join(dati.CACHE, 'risultati_dm_v2_dm.json')))['params']
+    params = json.load(open(os.path.join(dati.CACHE, 'results_dm_v2_dm.json')))['params']
     base_cols = E.feature_cols(next(iter(data.values())))
     meta = E.meta_of(sorted(data))
     out = {}
@@ -56,11 +56,11 @@ def main():
             fixed = E.evaluate(proba, meta, params, test)
             _, tuned_score = E.tune(proba, meta, test, start=params, rounds=1)
             key = '{} | {}'.format(test_src, label)
-            out[key] = {'fisso': float(np.mean(list(fixed.values()))), 'regolato_sulla_prova': tuned_score,
-                        'per_partita': {it[1]: v for it, v in fixed.items()}}
-            print('prova su {:8s} allenato su {:8s} {:36s} decodificatore fisso {:.4f} | regolato sulla prova {:.4f}  ({:.0f} s)'.format(
-                test_src, train_src, label, out[key]['fisso'], tuned_score, time.time() - t), flush=True)
-    with open(os.path.join(dati.CACHE, 'risultati_fonte_fuori.json'), 'w') as f:
+            out[key] = {'fixed': float(np.mean(list(fixed.values()))), 'tuned_on_test': tuned_score,
+                        'per_match': {it[1]: v for it, v in fixed.items()}}
+            print('test on {:8s} trained on {:8s} {:36s} fixed decoder {:.4f} | tuned on the test {:.4f}  ({:.0f} s)'.format(
+                test_src, train_src, label, out[key]['fixed'], tuned_score, time.time() - t), flush=True)
+    with open(os.path.join(dati.CACHE, 'results_source_out.json'), 'w') as f:
         json.dump(out, f, indent=1)
 
 

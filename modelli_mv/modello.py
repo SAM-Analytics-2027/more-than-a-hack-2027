@@ -1,11 +1,11 @@
-"""Modello a due passi per il possesso, e il giudice che lo valuta sulle partite esterne.
+"""Two-step possession model, and the judge that evaluates it on the external matches.
 
-1. Un classificatore (gradient boosting) stima per ogni frame la probabilità di H, A e D.
-2. Un decodificatore (Viterbi con durate minime) trasforma le probabilità in possessi realistici:
-   cambiare squadra o fermare il gioco costa, e un possesso o una pausa durano almeno un tot di frame.
+1. A classifier (gradient boosting) estimates, for every frame, the probability of H, A and D.
+2. A decoder (Viterbi with minimum durations) turns the probabilities into realistic possessions:
+   switching team or stopping play has a cost, and a possession or a pause lasts at least a given number of frames.
 
-Il giudice divide le partite in gruppi (mai frame della stessa partita in allenamento e in prova) e
-calcola lo spellF1 con lo stesso codice degli organizzatori (evaluation/possession_metrics.py).
+The judge splits the matches into folds (never frames of the same match in training and in test) and
+computes spellF1 with the organisers' own code (evaluation/possession_metrics.py).
 """
 import os
 import sys
@@ -21,19 +21,19 @@ from constants import H, A, D, X, INF_COST as INF, PROB_CLIP_MIN, EVENT_PROB_CLI
 
 
 # --------------------------------------------------------------------------------------------------
-# Decodificatore
+# Decoder
 # --------------------------------------------------------------------------------------------------
 
 @njit
 def _viterbi(cost, pen_t, m_pos, m_dead, m_pre, pen_pre, pen_same=0.0):
-    """cost (T, 3): costo di ogni stato in ogni frame. pen_t (T, 3, 3): costo di passare da uno stato all'altro
-    entrando nel frame t (può cambiare frame per frame).
+    """cost (T, 3): cost of each state in each frame. pen_t (T, 3, 3): cost of moving from one state to another
+    when entering frame t (it can change frame by frame).
 
-    Ogni stato ha una catena di sottostati che conta quanto dura. Lo stato D è sdoppiato in D_from_H (catena 2)
-    e D_from_A (catena 3) per penalizzare o modulare via `pen_same` le false interruzioni H -> D -> H o A -> D -> A.
-    Un possesso (H o A) può finire solo dopo m_pos frame; se finisce in una pausa (D) prima di m_pre frame paga
-    pen_pre in più ("regola prima delle pause", contro i possessi fantasma subito prima di un fallo laterale).
-    Una pausa può finire solo dopo m_dead frame. Con m_pre <= m_pos, pen_pre = 0 e pen_same = 0 coincide col base.
+    Each state has a chain of sub-states that counts how long it has lasted. State D is split into D_from_H (chain 2)
+    and D_from_A (chain 3), so that `pen_same` can penalise or modulate false interruptions H -> D -> H or A -> D -> A.
+    A possession (H or A) can end only after m_pos frames; if it ends in a pause (D) before m_pre frames it pays
+    an extra pen_pre ("pre-pause rule", against ghost possessions just before a throw-in).
+    A pause can end only after m_dead frames. With m_pre <= m_pos, pen_pre = 0 and pen_same = 0 it is the base decoder.
     """
     T = cost.shape[0]
     Lp = max(m_pos, m_pre)
@@ -128,12 +128,12 @@ def _viterbi(cost, pen_t, m_pos, m_dead, m_pre, pen_pre, pen_same=0.0):
 
 
 def penalties(T, params, events=None, d_min=None):
-    """Costi dei cambi frame per frame, (T, 3, 3).
+    """Cost of each change, frame by frame, (T, 3, 3).
 
-    Senza eventi sono costanti. Con le probabilità degli eventi (T, 4: niente, cambio squadra, inizio pausa,
-    ripresa) un cambio costa meno dove il modello vede l'evento: costo = base + peso * (-log p_evento).
-    Con `d_min` e `pen_no_touch`, i cambi diretti H <-> A quando nessun giocatore è vicino alla palla
-    (`d_min > touch_th`) pagano un costo aggiuntivo `pen_no_touch`, evitando cambi di possesso a palla lontana.
+    Without events they are constant. With the event probabilities (T, 4: nothing, team change, start of pause,
+    restart) a change costs less where the model sees the event: cost = base + weight * (-log p_event).
+    With `d_min` and `pen_no_touch`, direct H <-> A changes when no player is close to the ball
+    (`d_min > touch_th`) pay an extra cost `pen_no_touch`, avoiding possession changes with the ball far away.
     """
     turn = np.full(T, float(params['turn']))
     stop = np.full(T, float(params['stop']))
@@ -157,9 +157,9 @@ def penalties(T, params, events=None, d_min=None):
 
 
 def _apply_smart_tagging_priors(cost, period, df=None):
-    """Applica i prior bayesiani dai metadati ufficiali BAR-ATH_tactical_smart_tagging.xml (solo per il Barça):
-    - Prima del Kick Off (Start) di ciascun tempo (es. 110808..113660 nel 2° tempo), la palla non è ancora in gioco (D).
-    - Nelle esultanze post-gol (GOALS -> Kick Off After Goal) senza palla visibile e con giocatori al passo, rafforza D.
+    """Applies Bayesian priors from the official metadata BAR-ATH_tactical_smart_tagging.xml (Barça match only):
+    - Before the Kick Off (Start) of each half (e.g. 110808..113660 in the 2nd half), the ball is not in play yet (D).
+    - During goal celebrations (GOALS -> Kick Off After Goal) with no visible ball and players walking, D is reinforced.
     """
     from constants import OUR_FRAMES, FPS
     if len(period) != OUR_FRAMES or os.environ.get('MV_NO_SMART_TAGS'):
@@ -196,11 +196,11 @@ def _apply_smart_tagging_priors(cost, period, df=None):
 
 
 def decode(proba, period, no_data, params, events=None, d_min=None, df=None):
-    """Etichette 0/1/2 per i frame di gioco, X (3) fuori dai tempi.
+    """Labels 0/1/2 for the frames of play, X (3) outside the halves.
 
-    proba (T, 3); no_data: frame senza nessun giocatore visibile (es. replay), lì il costo è neutro.
-    params: turn, stop, rest (costi dei cambi), m_pos, m_dead (durate minime in frame), bias_d (spinta verso D),
-    w_ev (peso degli eventi, se ci sono), m_pre e pen_pre (regola prima delle pause), pen_no_touch, touch_th, pen_same.
+    proba (T, 3); no_data: frames with no visible player (e.g. replays), where the cost is neutral.
+    params: turn, stop, rest (costs of the changes), m_pos, m_dead (minimum durations in frames), bias_d (push towards D),
+    w_ev (weight of the events, if any), m_pre and pen_pre (pre-pause rule), pen_no_touch, touch_th, pen_same.
     """
     if d_min is None and df is not None:
         if 'd_min' in df.columns:
@@ -227,11 +227,11 @@ def decode(proba, period, no_data, params, events=None, d_min=None, df=None):
 
 
 # --------------------------------------------------------------------------------------------------
-# Punteggio: lo stesso spellF1 ufficiale, ma calcolato più in fretta (verificato uguale)
+# Score: the same official spellF1, but computed faster (checked to be identical)
 # --------------------------------------------------------------------------------------------------
 
 def spell_f1_fast(gt, pred):
-    """spellF1 come pm.spell_scores, con le sovrapposizioni trovate per ricerca binaria."""
+    """spellF1 as in pm.spell_scores, with the overlaps found by binary search."""
     runs = pm.valid_runs(gt)
     filled = pm.fill_abstentions(pred, runs)
     g = pm.possession_spells(gt, runs)
@@ -262,7 +262,7 @@ def spell_f1_fast(gt, pred):
 
 
 def to_codes(y):
-    """Etichette numeriche 0..3 nei codici del punteggio ufficiale (H, A, D, X)."""
+    """Numeric labels 0..3 converted to the codes of the official score (H, A, D, X)."""
     lut = np.array([pm.H, pm.A, pm.D, pm.X], dtype=np.int8)
     return lut[y]
 

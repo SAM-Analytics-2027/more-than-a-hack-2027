@@ -1,25 +1,25 @@
-"""Lettura delle partite nel formato dei file della gara (FIFA EPTS di Metrica).
+"""Reading matches in the format of the competition files (Metrica's FIFA EPTS).
 
-È la parte di data/analisi/formato_comune.py che serve ai modelli, copiata qui perché data/ non va su GitHub.
+This is the part of data/analisi/formato_comune.py that the models need, copied here because data/ is not on GitHub.
 
-Una partita è un dizionario, sempre con gli stessi campi:
-    name           nome breve della partita
-    home, away     nomi delle due squadre
-    fps            frame al secondo (25)
-    length, width  dimensioni del campo in metri
-    period         per ogni frame: 1 o 2 se è un frame di gioco, 0 altrimenti
-    px, py         posizioni dei giocatori in metri, forma (frame, slot); NaN quando lo slot non è tracciato
-    team           per ogni slot: 0 = casa, 1 = trasferta
-    bx, by         posizione della palla in metri; NaN quando non si vede
-    labels         'H', 'A', 'D' o 'X' per ogni frame (solo partite esterne; None per la nostra)
+A match is a dictionary, always with the same fields:
+    name           short name of the match
+    home, away     names of the two teams
+    fps            frames per second (25)
+    length, width  pitch size in metres
+    period         for each frame: 1 or 2 if it is a frame of play, 0 otherwise
+    px, py         player positions in metres, shape (frame, slot); NaN when the slot is not tracked
+    team           for each slot: 0 = home, 1 = away
+    bx, by         ball position in metres; NaN when it is not visible
+    labels         'H', 'A', 'D' or 'X' for each frame (external matches only; None for ours)
 
-Su disco:
-    <nome>_atd.txt              una riga per frame: numero:x,y,velocità;...;x,y,velocità:x,y,velocità palla
-    <nome>_atd.xml              squadre, slot dei giocatori, campo, fps, tempi
-    <nome>_possession_gt.csv    frame,label (solo partite esterne)
+On disk:
+    <name>_atd.txt              one line per frame: number:x,y,speed;...;x,y,speed:x,y,ball speed
+    <name>_atd.xml              teams, player slots, pitch, fps, halves
+    <name>_possession_gt.csv    frame,label (external matches only)
 
     read_ours()            Barça–Athletic (data/tactical/)
-    read_epts(cartella)    una partita in quel formato, per esempio data/altre_partite/dfl_sporcate/J03WMX
+    read_epts(folder)      one match in that format, for example data/altre_partite/dfl_sporcate/J03WMX
 """
 import glob
 import os
@@ -27,7 +27,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-# La cartella data/ della repo (quella con tactical/ e altre_partite/); si può cambiare con MTAH_DATA_DIR
+# The repo's data/ folder (the one with tactical/ and altre_partite/); it can be changed with MTAH_DATA_DIR
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 DATA_DIR = os.environ.get('MTAH_DATA_DIR') or os.path.join(ROOT, 'data')
 
@@ -40,13 +40,13 @@ from constants import (
 def _only(folder, pattern):
     hits = sorted(glob.glob(os.path.join(folder, pattern)))
     if len(hits) != 1:
-        raise FileNotFoundError('cercavo {} in {}: trovati {} file'.format(pattern, folder, len(hits)))
+        raise FileNotFoundError('looked for {} in {}: found {} files'.format(pattern, folder, len(hits)))
     return hits[0]
 
 
 def _fuse_broadcast_ball(tac, data_dir):
-    """Integra le coordinate palla mancanti nel tracking tattico con quelle del tracking broadcast sincronizzato,
-    scartando i frame di replay televisivo tramite verifica di congruenza del baricentro dei giocatori.
+    """Fills the missing ball coordinates of the tactical tracking with those of the synchronised broadcast tracking,
+    discarding TV replay frames by checking that the players' centroid is consistent.
     """
     bro_dir = os.path.join(data_dir, 'broadcast')
     if not os.environ.get('MV_USE_BROADCAST') or not os.path.isdir(bro_dir):
@@ -106,7 +106,7 @@ def _fuse_broadcast_ball(tac, data_dir):
 
 
 def read_ours(data_dir=DATA_DIR):
-    """Barça–Athletic dai file della gara (tactical/ + fusione palla da broadcast/)."""
+    """Barça–Athletic from the competition files (tactical/ + ball fused from broadcast/)."""
     tac = read_epts(os.path.join(data_dir, 'tactical'), name='Barça–Athletic',
                     length=OUR_LENGTH, width=OUR_WIDTH, halves=OUR_HALVES)
     return _fuse_broadcast_ball(tac, data_dir)
@@ -123,13 +123,13 @@ def _xml_parts(path):
 
 
 def read_epts(folder, name=None, length=None, width=None, halves=None, labels_folder=None):
-    """Una partita nel formato dei file della gara (FIFA EPTS di Metrica): *_atd.txt e *_atd.xml.
+    """One match in the format of the competition files (Metrica's FIFA EPTS): *_atd.txt and *_atd.xml.
 
-    Se c'è *_possession_gt.csv (frame,label), legge anche le etichette: lo cerca in `labels_folder`, se dato,
-    altrimenti nella cartella stessa. Le partite sporcate non hanno il CSV: le loro etichette sono quelle
-    della versione pulita, per esempio read_epts('.../dfl_sporcate/J03WMX', labels_folder='.../dfl_pulite/J03WMX').
-    I tempi si prendono da `halves` ((tempo, primo frame, ultimo frame), ...) se dato, altrimenti dai
-    parametri first/second_half_start/end dell'XML (numeri di frame del file .txt, che partono da 1).
+    If there is a *_possession_gt.csv (frame,label), the labels are read too: it is looked for in `labels_folder`,
+    if given, otherwise in the folder itself. Degraded matches have no CSV: their labels are those of the
+    clean version, for example read_epts('.../dfl_sporcate/J03WMX', labels_folder='.../dfl_pulite/J03WMX').
+    The halves come from `halves` ((half, first frame, last frame), ...) if given, otherwise from the
+    first/second_half_start/end parameters of the XML (frame numbers of the .txt file, which start at 1).
     """
     xml_path = _only(folder, '*_atd.xml')
     elements, params = _xml_parts(xml_path)
@@ -150,9 +150,9 @@ def read_epts(folder, name=None, length=None, width=None, halves=None, labels_fo
     with open(_only(folder, '*_atd.txt')) as handle:
         for line in handle:
             frame_id, players, ball = line.rstrip('\n').split(':')
-            row = int(frame_id) - 1  # frame_id parte da 1, i frame video da 0
+            row = int(frame_id) - 1  # frame_id starts at 1, video frames at 0
             values = np.fromstring(players.replace(';', ','), sep=',', dtype=np.float32).reshape(n_slots, 3)
-            px[row], py[row] = values[:, 0], values[:, 1]  # la terza colonna è la velocità: si ricalcola
+            px[row], py[row] = values[:, 0], values[:, 1]  # the third column is the speed: it is recomputed
             ball_values = np.fromstring(ball, sep=',', dtype=np.float32)
             bx[row], by[row] = ball_values[0], ball_values[1]
 
@@ -170,7 +170,7 @@ def read_epts(folder, name=None, length=None, width=None, halves=None, labels_fo
         labels = np.full(n_frames, 'X', dtype='<U1')
         labels[frames.astype(int)] = letters
     competition = next((el for tag, el in elements if tag == 'Competition'), None)
-    info = {  # informazioni della partita, per riscriverla uguale con save_epts
+    info = {  # match information, to write it back unchanged with save_epts
         'date': next((el.text or '' for tag, el in elements if tag == 'FileDate'), ''),
         'provider': next((el.text or '' for tag, el in elements if tag == 'ProviderName'), ''),
         'source': params.get('tracking_source') or '', 'matchday': params.get('matchday') or '',

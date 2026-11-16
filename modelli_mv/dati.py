@@ -1,14 +1,14 @@
-"""Le 30 partite esterne (e Barça–Athletic) trasformate in tabelle di caratteristiche, salvate in data/cache_mv/.
+"""The 30 external matches (and Barça–Athletic) turned into feature tables, saved in data/cache_mv/.
 
-Il tracking viene sempre dalla versione SPORCATA, le etichette dalla PULITA:
-    data/altre_partite/<fonte>_sporcate/<id>/<id>_atd.txt e _atd.xml     (l'input del modello)
-    data/altre_partite/<fonte>_pulite/<id>/<id>_possession_gt.csv        (la risposta giusta, solo per allenare)
-Le partite sono un elenco fisso (MATCHES): cartelle in più dentro data/altre_partite/ non cambiano niente.
+The tracking always comes from the DEGRADED version ("sporcate"), the labels from the CLEAN one ("pulite"):
+    data/altre_partite/<source>_sporcate/<id>/<id>_atd.txt and _atd.xml     (the model input)
+    data/altre_partite/<source>_pulite/<id>/<id>_possession_gt.csv          (the right answer, for training only)
+The matches are a fixed list (MATCHES): extra folders inside data/altre_partite/ change nothing.
 
-La cache sta dentro data/, quindi GitHub non la vede. Il suo nome contiene un'impronta del codice che calcola le
-caratteristiche: se il codice cambia, la cache si rifà da sola e non si usa mai una cache vecchia.
+The cache lives inside data/, so GitHub does not see it. Its name contains a fingerprint of the code that computes
+the features: if that code changes, the cache is rebuilt automatically and an old cache is never used.
 
-    python modelli_mv/dati.py        prepara la cache (circa 2 minuti, in parallelo)
+    python modelli_mv/dati.py        builds the cache (about 2 minutes, in parallel)
 """
 import hashlib
 import os
@@ -33,7 +33,7 @@ _CODE_HASH = None
 
 
 def code_hash():
-    """Impronta dei due file che calcolano le caratteristiche (a capo Windows e Mac contano uguale)."""
+    """Fingerprint of the two files that compute the features (Windows and Mac line endings count the same)."""
     global _CODE_HASH
     if _CODE_HASH is None:
         h = hashlib.sha256()
@@ -49,12 +49,12 @@ def _feat_dir():
 
 
 def external_matches():
-    """[(fonte, id)] delle 30 partite esterne, sempre le stesse e nello stesso ordine."""
+    """[(source, id)] of the 30 external matches, always the same ones and in the same order."""
     return [(src, mid) for src in SOURCES for mid in MATCHES[src]]
 
 
 def input_files(item):
-    """I file letti per una partita, relativi a data/ (per controllare che tutti abbiano gli stessi)."""
+    """The files read for one match, relative to data/ (to check that everyone has the same ones)."""
     src, mid = item
     if src == 'barca':
         return ['tactical/BAR-ATH_tactical_atd.txt', 'tactical/BAR-ATH_tactical_atd.xml']
@@ -68,11 +68,11 @@ def _path(src, mid):
 
 
 def table(item):
-    """La tabella delle caratteristiche di una partita (frame, period, y, caratteristiche), senza cache."""
+    """The feature table of one match (frame, period, y, features), without the cache."""
     src, mid = item
     if src == 'barca':
         m = C.fc.read_ours()
-        labels = np.full(len(m['period']), 'X')       # la risposta della gara non si usa mai
+        labels = np.full(len(m['period']), 'X')       # the competition answer is never used
     else:
         m = C.fc.read_epts(os.path.join(BASE, src + '_sporcate', mid),
                            labels_folder=os.path.join(BASE, src + '_pulite', mid))
@@ -103,15 +103,15 @@ def _has_raw(item):
 
 
 def build_all(items=None, workers=4):
-    """Prepara la cache delle partite che non ce l'hanno ancora."""
+    """Builds the cache for the matches that do not have it yet."""
     items = items or external_matches() + [BARCA]
     todo = [it for it in items if not os.path.exists(_path(*it)) and _has_raw(it)]
     if not todo:
         return
-    print('preparo le caratteristiche di {} partite in {}'.format(len(todo), _feat_dir()), flush=True)
+    print('computing the features of {} matches in {}'.format(len(todo), _feat_dir()), flush=True)
     with ProcessPoolExecutor(max_workers=workers) as ex:
         for path in ex.map(build_one, todo):
-            print('  pronta', os.path.basename(path), flush=True)
+            print('  ready', os.path.basename(path), flush=True)
 
 
 def load(src, mid):
@@ -119,7 +119,7 @@ def load(src, mid):
 
 
 def load_all(items=None):
-    """{(fonte, id): DataFrame} per le partite esterne."""
+    """{(source, id): DataFrame} for the external matches."""
     items = items or external_matches()
     avail = [it for it in items if os.path.exists(_path(*it)) or _has_raw(it)]
     return {it: load(*it) for it in avail}

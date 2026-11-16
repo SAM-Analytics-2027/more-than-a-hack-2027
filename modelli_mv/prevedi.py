@@ -1,13 +1,13 @@
-"""Allena il modello finale su tutte le partite esterne e scrive le risposte per Barça–Athletic.
+"""Trains the final model on all the external matches and writes the answers for Barça–Athletic.
 
-    python modelli_mv/prevedi.py --nome dm --parametri risultati_dm_v2_dm.json --fonti dfl metrica
-    python modelli_mv/prevedi.py --nome ind --parametri risultati_dm_v2_ind.json --indicatore
-    python modelli_mv/prevedi.py --nome media --parametri risultati_dm_media_dm_ind.json --media dm ind
+    python modelli_mv/prevedi.py --name dm --params results_dm_v2_dm.json --sources dfl metrica
+    python modelli_mv/prevedi.py --name ind --params results_dm_v2_ind.json --source-flag
+    python modelli_mv/prevedi.py --name mean --params results_dm_mean_dm_ind.json --mean dm ind
 
-I parametri del decodificatore sono quelli regolati sulle partite esterne (un file json in data/cache_mv/).
-Il file va in evaluation/results/mv_<nome>.csv (ignorato da GitHub) e si controlla con
-python evaluation/validate_submission.py evaluation/results/mv_<nome>.csv
-La risposta della gara non entra mai: né nell'allenamento, né nella scelta dei parametri.
+The decoder parameters are the ones tuned on the external matches (a json file in data/cache_mv/).
+The file goes to evaluation/results/mv_<name>.csv (ignored by GitHub) and is checked with
+python evaluation/validate_submission.py evaluation/results/mv_<name>.csv
+The competition answer is never used: neither in training nor in the choice of the parameters.
 """
 import argparse
 import json
@@ -48,7 +48,7 @@ def fit_all(cols, data, events=False):
     model = E.make_model().fit(pd.concat(Xs, ignore_index=True), np.concatenate(ys),
                                sample_weight=np.concatenate(ws))
     v = model.validation_score_
-    print('{} iterazioni; perdita di validazione a 100/250/ultima: {:.4f} {:.4f} {:.4f}'.format(
+    print('{} iterations; validation loss at 100/250/last: {:.4f} {:.4f} {:.4f}'.format(
         model.n_iter_, v[min(100, len(v) - 1)], v[min(250, len(v) - 1)], v[-1]), flush=True)
     return model
 
@@ -58,11 +58,11 @@ def main(name, params_file, sources, flag=False, ev_name=None):
     target = dati.load('barca', 'BAR-ATH')
     if flag:
         E.add_source_flag(data)
-        target['fonte_tv'] = np.float32(0)      # il Barça ha una telecamera tattica, non le riprese tv
+        target['fonte_tv'] = np.float32(0)      # Barça has a tactical camera, not TV footage
     cols = E.feature_cols(next(iter(data.values())))
     tag = name
     params = json.load(open(os.path.join(dati.CACHE, params_file)))['params']
-    print('partite', len(data), 'parametri', params, flush=True)
+    print('matches', len(data), 'parameters', params, flush=True)
     model = fit_all(cols, data)
     proba = E.predict_sym(model, target, cols)
     events = None
@@ -76,11 +76,11 @@ def main(name, params_file, sources, flag=False, ev_name=None):
     out = os.path.join(C.ROOT, 'evaluation', 'results', 'mv_{}.csv'.format(tag.replace('+', '_')))
     pd.DataFrame({'frame': np.arange(len(pred)), 'label': LETTERS[pred]}).to_csv(out, index=False)
     np.save(os.path.join(dati.CACHE, 'barca_proba_{}.npy'.format(name)), proba)
-    print('scritto', out, {k: int((LETTERS[pred] == k).sum()) for k in 'HADX'})
+    print('wrote', out, {k: int((LETTERS[pred] == k).sum()) for k in 'HADX'})
 
 
 def combine(names, params_file, out_name):
-    """Media delle probabilità di più modelli finali già allenati, poi il decodificatore."""
+    """Mean of the probabilities of several final models already trained, then the decoder."""
     target = dati.load('barca', 'BAR-ATH')
     proba = np.mean([np.load(os.path.join(dati.CACHE, 'barca_proba_{}.npy'.format(n))) for n in names], axis=0)
     params = json.load(open(os.path.join(dati.CACHE, params_file)))['params']
@@ -88,23 +88,23 @@ def combine(names, params_file, out_name):
     pred = M.decode(proba, target['period'].values, no_data, params, df=target)
     out = os.path.join(C.ROOT, 'evaluation', 'results', 'mv_{}.csv'.format(out_name))
     pd.DataFrame({'frame': np.arange(len(pred)), 'label': LETTERS[pred]}).to_csv(out, index=False)
-    print('scritto', out, params, {k: int((LETTERS[pred] == k).sum()) for k in 'HADX'})
+    print('wrote', out, params, {k: int((LETTERS[pred] == k).sum()) for k in 'HADX'})
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('--nome', required=True, help='nome del file di risposte')
-    ap.add_argument('--parametri', required=True, help='file json dei parametri, in data/cache_mv/')
-    ap.add_argument('--fonti', nargs='+', default=list(dati.SOURCES))
-    ap.add_argument('--indicatore', action='store_true')
-    ap.add_argument('--eventi', action='store_true')
-    ap.add_argument('--media', nargs='+', help='non allena: fa la media dei modelli finali con questi nomi')
-    ap.add_argument('--peso-tv', type=float, default=1.0, help='peso dei frame SkillCorner (es. 0.25)')
-    ap.add_argument('--pesi-brevi', action='store_true', help='più peso ai frame dei possessi brevi')
+    ap.add_argument('--name', required=True, help='name of the answers file')
+    ap.add_argument('--params', required=True, help='json file with the parameters, in data/cache_mv/')
+    ap.add_argument('--sources', nargs='+', default=list(dati.SOURCES))
+    ap.add_argument('--source-flag', action='store_true')
+    ap.add_argument('--events', action='store_true')
+    ap.add_argument('--mean', nargs='+', help='does not train: averages the final models with these names')
+    ap.add_argument('--tv-weight', type=float, default=1.0, help='weight of the SkillCorner frames (e.g. 0.25)')
+    ap.add_argument('--short-weights', action='store_true', help='more weight to the frames of short possessions')
     a = ap.parse_args()
-    E.TV_WEIGHT = a.peso_tv
-    E.WEIGHTS = a.pesi_brevi
-    if a.media:
-        combine(a.media, a.parametri, a.nome)
+    E.TV_WEIGHT = a.tv_weight
+    E.WEIGHTS = a.short_weights
+    if a.mean:
+        combine(a.mean, a.params, a.name)
     else:
-        main(a.nome, a.parametri, set(a.fonti), a.indicatore, 'ev' if a.eventi else None)
+        main(a.name, a.params, set(a.sources), a.source_flag, 'ev' if a.events else None)
