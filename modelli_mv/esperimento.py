@@ -1,13 +1,13 @@
-"""Prove del modello sulle 30 partite esterne, sempre su partite lasciate fuori dall'allenamento.
+"""Model experiments on the 30 external matches, always on matches left out of training.
 
-    python modelli_mv/esperimento.py allena  --nome v2                    allena su tutte le fonti (5 gruppi)
-    python modelli_mv/esperimento.py allena  --nome v2_dm --fonti dfl metrica      solo DFL e Metrica
-    python modelli_mv/esperimento.py allena  --nome v2_ind --indicatore            tutte, con la colonna fonte_tv
-    python modelli_mv/esperimento.py eventi  --nome ev_v2                 il modello degli eventi
-    python modelli_mv/esperimento.py decodifica --nome v2 [--eventi ev_v2]   regola il decodificatore e dà i punteggi
-    python modelli_mv/esperimento.py annidato   --nome v2 [--eventi ev_v2]   lo stesso, regolando senza il gruppo giudicato
+    python modelli_mv/esperimento.py train   --name v2                     trains on all sources (5 folds)
+    python modelli_mv/esperimento.py train   --name v2_dm --sources dfl metrica      DFL and Metrica only
+    python modelli_mv/esperimento.py train   --name v2_ind --source-flag             all, with the fonte_tv column
+    python modelli_mv/esperimento.py events  --name ev_v2                  the event model
+    python modelli_mv/esperimento.py decode  --name v2 [--events ev_v2]    tunes the decoder and gives the scores
+    python modelli_mv/esperimento.py nested  --name v2 [--events ev_v2]    the same, tuning without the judged fold
 
-Le probabilità "fuori gruppo" di ogni partita si salvano in data/cache_mv/oof_<nome>.npz.
+The out-of-fold probabilities of each match are saved in data/cache_mv/oof_<name>.npz.
 """
 import argparse
 import itertools
@@ -34,7 +34,7 @@ from constants import (  # noqa: E402
 
 
 def folds(items):
-    """Gruppi di partite intere, con le fonti distribuite in modo uniforme (sempre sugli ID canonici delle 30 partite)."""
+    """Folds of whole matches, with the sources spread evenly (always on the canonical IDs of the 30 matches)."""
     canon = sorted(dati.external_matches())
     out = {}
     for src in dati.SOURCES:
@@ -51,9 +51,9 @@ def feature_cols(df):
 
 
 def short_spell_weights(y, period):
-    """Peso di ogni frame: i possessi brevi pesano di più, quelli lunghi di meno (idea di Stefano).
+    """Weight of each frame: short possessions weigh more, long ones less (Stefano's idea).
 
-    w = sqrt(durata mediana / durata del possesso), tra 1/3 e 3; i frame di palla ferma pesano 1.
+    w = sqrt(median duration / possession duration), between 1/3 and 3; dead-ball frames weigh 1.
     """
     w = np.ones(len(y), dtype=np.float32)
     spells = []
@@ -74,9 +74,9 @@ def short_spell_weights(y, period):
     return w
 
 
-WEIGHTS = False        # True: più peso ai possessi brevi
-NO_RICOCHETS = False   # True: allena sulle etichette DFL senza rimpalli (etichette.py)
-TV_WEIGHT = 1.0        # peso dei frame SkillCorner in allenamento (1/4 = valgono come 5 partite)
+WEIGHTS = False        # True: more weight to short possessions
+NO_RICOCHETS = False   # True: trains on the DFL labels without ricochets (etichette.py)
+TV_WEIGHT = 1.0        # weight of the SkillCorner frames in training (1/4 = they count as 5 matches)
 
 
 def training_rows(df, cols, swap=True):
@@ -99,7 +99,7 @@ def make_model():
 
 
 def predict_sym(model, df, cols):
-    """Media della previsione diretta e di quella a squadre scambiate (rimesse a posto)."""
+    """Mean of the direct prediction and of the one with the teams swapped (swapped back)."""
     X = df[cols]
     p1 = model.predict_proba(X)
     p2 = model.predict_proba(C.swap_teams(X)[cols])[:, [1, 0, 2]]
@@ -107,7 +107,7 @@ def predict_sym(model, df, cols):
 
 
 def add_source_flag(data):
-    """Colonna 'fonte_tv': 1 per le partite SkillCorner (tracking dalle riprese tv), 0 per le altre e per il Barça."""
+    """Column 'fonte_tv': 1 for the SkillCorner matches (tracking from TV footage), 0 for the others and for Barça."""
     for it, df in data.items():
         df['fonte_tv'] = np.float32(it[0] == 'skillcorner')
     return data
@@ -120,7 +120,7 @@ def train(name, train_sources, flag=False):
     if NO_RICOCHETS:
         import etichette
         for it in data:
-            if it[0] == 'dfl':      # solo per allenare: il giudizio usa sempre le etichette originali (meta_of)
+            if it[0] == 'dfl':      # training only: evaluation always uses the original labels (meta_of)
                 data[it] = data[it].assign(y=etichette.load(it[1]))
     items = sorted(data)
     fold_of = folds(items)
@@ -137,15 +137,15 @@ def train(name, train_sources, flag=False):
         model = make_model().fit(X, y, sample_weight=w)
         for it in te:
             oof[it] = predict_sym(model, data[it], cols).astype(np.float32)
-        print('gruppo {}: {} partite in allenamento ({} righe), {} iterazioni, {:.0f} s'.format(
+        print('fold {}: {} training matches ({} rows), {} iterations, {:.0f} s'.format(
             k, len(tr), len(y), model.n_iter_, time.time() - t), flush=True)
     path = os.path.join(dati.CACHE, 'oof_{}.npz'.format(name))
     np.savez_compressed(path, **{'{}__{}'.format(*it): p for it, p in oof.items()})
-    print('salvate', path)
+    print('saved', path)
 
 
 def event_labels(y):
-    """0 niente, 1 cambio squadra, 2 inizio pausa, 3 ripresa, intorno a ogni cambio dell'etichetta vera."""
+    """0 nothing, 1 team change, 2 start of pause, 3 restart, around every change of the true label."""
     codes = M.to_codes(y)
     ev = np.zeros(len(y), dtype=np.int8)
     runs = M.pm.valid_runs(codes)
@@ -161,7 +161,7 @@ def event_labels(y):
 
 
 def train_events(name):
-    """Il modello degli eventi: per ogni frame, la probabilità che lì cambi la squadra, inizi una pausa o riprenda il gioco."""
+    """The event model: for each frame, the probability that the team changes, a pause starts or play restarts there."""
     data = dati.load_all()
     items = sorted(data)
     fold_of = folds(items)
@@ -189,10 +189,10 @@ def train_events(name):
             X = data[it][cols]
             p = (model.predict_proba(X) + model.predict_proba(C.swap_teams(X)[cols])) / 2
             oof[it] = p.astype(np.float32)
-        print('gruppo {}: {} iterazioni, {:.0f} s'.format(k, model.n_iter_, time.time() - t), flush=True)
+        print('fold {}: {} iterations, {:.0f} s'.format(k, model.n_iter_, time.time() - t), flush=True)
     path = os.path.join(dati.CACHE, 'oof_{}.npz'.format(name))
     np.savez_compressed(path, **{'{}__{}'.format(*it): p for it, p in oof.items()})
-    print('salvate', path)
+    print('saved', path)
 
 
 def load_oof(name):
@@ -220,9 +220,9 @@ def summary(scores):
 
 
 def tune(oof, data_meta, items, start=None, rounds=2):
-    """Ricerca per coordinate: un parametro alla volta, il valore migliore, poi il giro successivo.
+    """Coordinate search: one parameter at a time, the best value, then the next round.
 
-    Obiettivo: media delle partite (se solo DFL+Metrica) o delle fonti.
+    Objective: mean over the matches (if DFL+Metrica only) or over the sources.
     """
     params = dict(start or DEFAULT)
     best = float(np.mean(list(evaluate(oof, data_meta, params, items).values())))
@@ -237,7 +237,7 @@ def tune(oof, data_meta, items, start=None, rounds=2):
                 s = float(np.mean(list(evaluate(oof, data_meta, trial, items).values())))
                 if s > best + 1e-6:
                     best, params = s, trial
-        print('  giro {}: {:.4f} {}'.format(r + 1, best, params), flush=True)
+        print('  round {}: {:.4f} {}'.format(r + 1, best, params), flush=True)
     return params, best
 
 
@@ -259,23 +259,23 @@ def decode_report(name, ev_name=None):
     for it in items:
         y, per, nd, _ = meta[it]
         raw[it] = M.score(y, np.where(per > 0, oof[it].argmax(1), 3).astype(np.int8))
-    print('senza decodificatore (argmax frame per frame):', summary(raw))
-    print('decodificatore di partenza:', summary(evaluate(oof, meta, DEFAULT, items)))
+    print('without decoder (frame-by-frame argmax):', summary(raw))
+    print('starting decoder:', summary(evaluate(oof, meta, DEFAULT, items)))
     params, best = tune(oof, meta, items)
     scores = evaluate(oof, meta, params, items)
     tot, per_src = summary(scores)
-    print('regolato:', round(tot, 4), {k: round(v, 4) for k, v in per_src.items()})
+    print('tuned:', round(tot, 4), {k: round(v, 4) for k, v in per_src.items()})
     for it in items:
         print('   {:12s} {:10s} {:.3f}'.format(it[0], it[1], scores[it]))
     tag = name + ('+' + ev_name if ev_name else '')
-    with open(os.path.join(dati.CACHE, 'risultati_{}.json'.format(tag)), 'w') as f:
-        json.dump({'params': params, 'media_fonti': tot, 'per_fonte': per_src,
-                   'per_partita': {'{}__{}'.format(*k): v for k, v in scores.items()}}, f, indent=1)
+    with open(os.path.join(dati.CACHE, 'results_{}.json'.format(tag)), 'w') as f:
+        json.dump({'params': params, 'mean_sources': tot, 'per_source': per_src,
+                   'per_match': {'{}__{}'.format(*k): v for k, v in scores.items()}}, f, indent=1)
     return params
 
 
 def nested_report(name, ev_name=None):
-    """Punteggio onesto: i parametri del decodificatore si regolano senza il gruppo su cui si giudica."""
+    """Honest score: the decoder parameters are tuned without the fold being judged."""
     oof = load_oof(name)
     items = sorted(oof)
     fold_of = folds(items)
@@ -287,7 +287,7 @@ def nested_report(name, ev_name=None):
         params, _ = tune(oof, meta, tr, rounds=1)
         scores.update(evaluate(oof, meta, params, te))
     tot, per_src = summary(scores)
-    print('annidato:', round(tot, 4), {k: round(v, 4) for k, v in per_src.items()})
+    print('nested:', round(tot, 4), {k: round(v, 4) for k, v in per_src.items()})
     return scores
 
 
@@ -300,9 +300,9 @@ def _write_labels(path, codes):
 
 
 def export_external(name, params_file, out_name):
-    """Risposte "fuori allenamento" sulle 10 partite DFL e Metrica, per la pagina della dashboard sulle partite esterne.
+    """Out-of-training answers on the 10 DFL and Metrica matches, for the dashboard page on the external matches.
 
-    Una cartella per modello: data/risultati_esterne/<out_name>/<partita>.csv, nello stesso formato del file del Barça.
+    One folder per model: data/risultati_esterne/<out_name>/<match>.csv, in the same format as the Barça file.
     """
     oof = load_oof(name)
     params = json.load(open(os.path.join(dati.CACHE, params_file)))['params']
@@ -311,12 +311,12 @@ def export_external(name, params_file, out_name):
     for it in items:
         _, per, nd, _ = meta[it]
         _write_labels(os.path.join(EXT_RESULTS, out_name, it[1] + '.csv'), M.decode(oof[it], per, nd, params))
-    print('scritte', len(items), 'partite in', os.path.join(EXT_RESULTS, out_name))
+    print('wrote', len(items), 'matches in', os.path.join(EXT_RESULTS, out_name))
 
 
 def export_baseline(window=50):
-    """La baseline degli organizzatori (starter/baseline.py) sulle partite esterne sporcate: squadra del giocatore
-    più vicino alla palla, poi voto di maggioranza su ±window frame; D dove nessuno ha la palla."""
+    """The organisers' baseline (starter/baseline.py) on the degraded external matches: team of the player
+    closest to the ball, then a majority vote over ±window frames; D where nobody has the ball."""
     for it in [i for i in dati.external_matches() if i[0] in ('dfl', 'metrica')]:
         df = dati.load(*it)
         dh, da = df['d_casa'].values, df['d_ospiti'].values
@@ -329,34 +329,34 @@ def export_baseline(window=50):
         out = np.where(h + a > 0, np.where(h >= a, 0, 1), 2).astype(np.int8)
         out[df['period'].values == 0] = 3
         _write_labels(os.path.join(EXT_RESULTS, 'baseline_smooth{}'.format(window), it[1] + '.csv'), out)
-    print('baseline scritta')
+    print('baseline written')
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('cosa', choices=['allena', 'eventi', 'decodifica', 'annidato', 'esporta', 'baseline'])
-    ap.add_argument('--parametri', help='per "esporta": file json dei parametri, in data/cache_mv/')
-    ap.add_argument('--come', help='per "esporta": nome della cartella in data/risultati_esterne/')
-    ap.add_argument('--eventi', default=None, help='probabilità degli eventi da usare nel decodificatore')
-    ap.add_argument('--nome', default='tutte')
-    ap.add_argument('--fonti', nargs='+', default=list(dati.SOURCES))
-    ap.add_argument('--indicatore', action='store_true', help='aggiunge la colonna fonte_tv (SkillCorner sì/no)')
-    ap.add_argument('--pesi-brevi', action='store_true', help='più peso ai frame dei possessi brevi')
-    ap.add_argument('--senza-rimbalzi', action='store_true', help='allena sulle etichette DFL senza rimpalli')
-    ap.add_argument('--peso-tv', type=float, default=1.0, help='peso dei frame SkillCorner (es. 0.25)')
+    ap.add_argument('what', choices=['train', 'events', 'decode', 'nested', 'export', 'baseline'])
+    ap.add_argument('--params', help='for "export": json file with the parameters, in data/cache_mv/')
+    ap.add_argument('--out', help='for "export": name of the folder in data/risultati_esterne/')
+    ap.add_argument('--events', default=None, help='event probabilities to use in the decoder')
+    ap.add_argument('--name', default='all')
+    ap.add_argument('--sources', nargs='+', default=list(dati.SOURCES))
+    ap.add_argument('--source-flag', action='store_true', help='adds the fonte_tv column (SkillCorner yes/no)')
+    ap.add_argument('--short-weights', action='store_true', help='more weight to the frames of short possessions')
+    ap.add_argument('--no-ricochets', action='store_true', help='trains on the DFL labels without ricochets')
+    ap.add_argument('--tv-weight', type=float, default=1.0, help='weight of the SkillCorner frames (e.g. 0.25)')
     a = ap.parse_args()
-    WEIGHTS = a.pesi_brevi
-    NO_RICOCHETS = a.senza_rimbalzi
-    TV_WEIGHT = a.peso_tv
-    if a.cosa == 'allena':
-        train(a.nome, set(a.fonti), a.indicatore)
-    elif a.cosa == 'annidato':
-        nested_report(a.nome, a.eventi)
-    elif a.cosa == 'eventi':
-        train_events(a.nome)
-    elif a.cosa == 'esporta':
-        export_external(a.nome, a.parametri, a.come)
-    elif a.cosa == 'baseline':
+    WEIGHTS = a.short_weights
+    NO_RICOCHETS = a.no_ricochets
+    TV_WEIGHT = a.tv_weight
+    if a.what == 'train':
+        train(a.name, set(a.sources), a.source_flag)
+    elif a.what == 'nested':
+        nested_report(a.name, a.events)
+    elif a.what == 'events':
+        train_events(a.name)
+    elif a.what == 'export':
+        export_external(a.name, a.params, a.out)
+    elif a.what == 'baseline':
         export_baseline()
     else:
-        decode_report(a.nome, a.eventi)
+        decode_report(a.name, a.events)

@@ -1,18 +1,18 @@
-"""Etichette DFL senza rimpalli: le avvicina alla definizione di possesso delle regole (CHALLENGE.md).
+"""DFL labels without ricochets: brings them closer to the possession definition of the rules (CHALLENGE.md).
 
-La DFL cambia possesso a ogni tocco; le regole dicono che un tocco senza controllo, una deviazione o un
-rimpallo non cambiano il possesso. Il filtro è quello di Stefano (possession_model/dfl_dataset.py, ramo ste),
-con le sue soglie, riscritto per i nostri file. Usa il tracking PULITO, dove la palla si vede bene:
+DFL changes possession at every touch; the rules say that a touch without control, a deflection or a
+ricochet does not change possession. The filter is Stefano's (possession_model/dfl_dataset.py, branch ste),
+with his thresholds, rewritten for our files. It uses the CLEAN tracking, where the ball is clearly visible:
 
-- si guardano solo i possessi brevi (al massimo 1,6 s) vicini ad altro gioco vivo;
-- se la palla passa tra almeno due compagni (un passaggio vero) il possesso resta;
-- se la tocca un solo giocatore, controllata (palla entro 1,6 m e sotto 16 m/s) per meno di 0,24 s
-  (0,36 s se subito dopo c'è una pausa), è un rimpallo: il tratto passa alla squadra di prima
-  (o alla vicina con il possesso più lungo).
+- only short possessions (at most 1.6 s) next to other live play are considered;
+- if the ball goes between at least two team-mates (a real pass) the possession stays;
+- if a single player touches it, under control (ball within 1.6 m and below 16 m/s) for less than 0.24 s
+  (0.36 s if a pause follows right after), it is a ricochet: the stretch goes to the previous team
+  (or to the neighbour with the longest possession).
 
-Si usa solo per ALLENARE: il giudizio resta sempre sulle etichette originali.
+It is used for TRAINING only: evaluation always uses the original labels.
 
-    python modelli_mv/etichette.py      salva le etichette in data/cache_mv/etichette_senza_rimbalzi/
+    python modelli_mv/etichette.py      saves the labels in data/cache_mv/etichette_senza_rimbalzi/
 """
 import os
 import sys
@@ -33,8 +33,8 @@ def _runs(v):
     return list(zip(a.tolist(), b.tolist(), v[a].tolist()))
 
 
-def senza_rimbalzi(y, match, fps=25):
-    """y: etichette 0 H, 1 A, 2 D, 3 X. match: la partita PULITA (dizionario di formato_comune)."""
+def without_ricochets(y, match, fps=25):
+    """y: labels 0 H, 1 A, 2 D, 3 X. match: the CLEAN match (formato_comune dictionary)."""
     out = y.copy()
     px, py, bx, by, team = match['px'], match['py'], match['bx'], match['by'], match['team']
     min_ctrl = max(2, int(round(MIN_CTRL_S * fps)))
@@ -109,8 +109,8 @@ if __name__ == '__main__':
             continue
         clean = dati.C.fc.read_epts(os.path.join(dati.BASE, 'dfl_pulite', mid))
         y = dati.load(src, mid)['y'].values.astype(np.int8)
-        yf = senza_rimbalzi(y, clean)
+        yf = without_ricochets(y, clean)
         np.save(os.path.join(OUT_DIR, mid + '.npy'), yf)
         per = clean['period']
-        print('{}: possessi {} -> {}, frame cambiati {:.1%}'.format(
+        print('{}: possessions {} -> {}, frames changed {:.1%}'.format(
             mid, _spells(y, per), _spells(yf, per), (yf != y).mean()), flush=True)

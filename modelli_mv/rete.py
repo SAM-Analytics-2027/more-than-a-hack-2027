@@ -1,15 +1,15 @@
-"""La rete neurale convoluzionale sulla sequenza: 5 frame al secondo, ±25 s di contesto prima e dopo ogni momento.
+"""The convolutional neural network on the sequence: 5 frames per second, ±25 s of context before and after each moment.
 
-    train(data, items, cols, seed)   allena su quelle partite; restituisce il modello (rete + normalizzazione)
-    predict(model, df, it)           (T, 3) probabilità H, A, D per ogni frame della partita
-    save(model, path) / load(path)   pesi su disco (file .pt di PyTorch, pochi MB)
+    train(data, items, cols, seed)   trains on those matches; returns the model (network + normalisation)
+    predict(model, df, it)           (T, 3) probabilities of H, A, D for every frame of the match
+    save(model, path) / load(path)   weights on disk (PyTorch .pt file, a few MB)
 
-Architettura: convoluzione 1×1 (284 -> 96 canali), 7 blocchi residui di convoluzioni dilatate (dilatazione
-1, 2, ..., 64; BatchNorm, GELU, Dropout 0,15), convoluzione 1×1 (96 -> 3). L'input sono le caratteristiche
-normalizzate (mediana e scarto interquartile delle partite di allenamento) più un indicatore per ogni valore mancante.
+Architecture: 1×1 convolution (284 -> 96 channels), 7 residual blocks of dilated convolutions (dilation
+1, 2, ..., 64; BatchNorm, GELU, Dropout 0.15), 1×1 convolution (96 -> 3). The input is the features
+normalised (median and interquartile range of the training matches) plus one indicator for each missing value.
 
-Dove gira: scheda grafica NVIDIA (cuda) o Apple (mps) se c'è, altrimenti processore. Si può imporre con la
-variabile d'ambiente MV_DEVICE (cpu, cuda, mps). La previsione dai pesi salvati si fa sempre sul processore.
+Where it runs: NVIDIA (cuda) or Apple (mps) GPU if available, otherwise CPU. It can be forced with the
+MV_DEVICE environment variable (cpu, cuda, mps). Prediction from saved weights always runs on the CPU.
 """
 import os
 import sys
@@ -23,10 +23,10 @@ import caratteristiche as C  # noqa: E402
 import esperimento as E  # noqa: E402
 import constants as K  # noqa: E402
 
-STRIDE = K.STRIDE        # 5 frame al secondo: la rete guarda la sequenza a 0,2 s di passo
-CROP = K.CROP            # tratti di 60 s per allenare
+STRIDE = K.STRIDE        # 5 frames per second: the network looks at the sequence in 0.2 s steps
+CROP = K.CROP            # 60 s windows for training
 EPOCHS = int(os.environ.get('MV_EPOCHS', K.EPOCHS))
-TV_WEIGHT = K.TV_WEIGHT  # peso dei frame SkillCorner
+TV_WEIGHT = K.TV_WEIGHT  # weight of the SkillCorner frames
 
 
 def device():
@@ -41,7 +41,7 @@ def device():
 
 
 class Block(nn.Module):
-    """Convoluzione "dilatata": guarda frame sempre più lontani, avanti e indietro, con un collegamento diretto."""
+    """Dilated convolution: looks at frames further and further away, forwards and backwards, with a skip connection."""
     def __init__(self, c, d):
         super().__init__()
         self.conv = nn.Conv1d(c, c, 3, padding=d, dilation=d)
@@ -54,8 +54,8 @@ class Block(nn.Module):
 
 
 class BlockV2(nn.Module):
-    """Blocco residuo dilatato v2: replicate padding (niente artefatti ai bordi dei crop),
-    Squeeze-and-Excitation sul canale e Dropout1d strutturato.
+    """Dilated residual block v2: replicate padding (no artefacts at the edges of the crops),
+    Squeeze-and-Excitation on the channels and structured Dropout1d.
     """
     def __init__(self, c, d):
         super().__init__()
@@ -78,7 +78,7 @@ class BlockV2(nn.Module):
 
 
 class Net(nn.Module):
-    """Rete convoluzionale non causale: ogni momento vede ±127 passi (±25 s) intorno a sé."""
+    """Non-causal convolutional network: each moment sees ±127 steps (±25 s) around it."""
     def __init__(self, n_in, c=K.CHANNELS, arch='v1'):
         super().__init__()
         self.arch = arch
@@ -98,7 +98,7 @@ _RAW = {}
 
 
 def _raw(df, it, cols):
-    """Una volta per partita: i frame a 5 al secondo di ogni tempo, diretti e a squadre scambiate (non normalizzati)."""
+    """Once per match: the frames at 5 per second of each half, as they are and with the teams swapped (not normalised)."""
     sig = (it, len(cols), float(np.nansum(df[cols[0]].values[:200])))
     if sig in _RAW:
         return _RAW[sig]
@@ -122,7 +122,7 @@ def _raw(df, it, cols):
 
 
 def _seqs(df, it, cols, med, iqr, swap=False):
-    """Per ogni tempo: (caratteristiche normalizzate + indicatori dei mancanti, etichette, pesi, frame)."""
+    """For each half: (normalised features + missing-value indicators, labels, weights, frames)."""
     out = []
     for xo, xs, y, ys, w, sel in _raw(df, it, cols):
         x = ((xs if swap else xo) - med) / iqr
@@ -134,7 +134,7 @@ def _seqs(df, it, cols, med, iqr, swap=False):
 
 
 def train(data, items, cols, seed, dev=None, arch='v2'):
-    """Allena la rete sulle partite `items`. Restituisce {'net', 'med', 'iqr', 'cols', 'seed', 'per_epoch', 'arch'}."""
+    """Trains the network on the matches `items`. Returns {'net', 'med', 'iqr', 'cols', 'seed', 'per_epoch', 'arch'}."""
     torch.manual_seed(seed)
     dev = dev or device()
     epochs = int(os.environ.get('MV_EPOCHS', EPOCHS))
@@ -190,7 +190,7 @@ def train(data, items, cols, seed, dev=None, arch='v2'):
             if w_trans > 0.0:
                 t_logits = trans_head(feat).squeeze(1)[:, 1:]
                 changed = ((yb[:, 1:] != yb[:, :-1]) & (yb[:, 1:] < 3) & (yb[:, :-1] < 3)).float()
-                # Espande il target di transizione di ±1 passo (a 5 fps = ±0.2 s)
+                # Widens the transition target by ±1 step (at 5 fps = ±0.2 s)
                 t_target = changed.clone()
                 t_target[:, 1:] = torch.maximum(t_target[:, 1:], changed[:, :-1])
                 t_target[:, :-1] = torch.maximum(t_target[:, :-1], changed[:, 1:])
@@ -210,7 +210,7 @@ def train(data, items, cols, seed, dev=None, arch='v2'):
 
 
 def predict(model, df, it):
-    """(T, 3) probabilità H, A, D: media della previsione diretta e di quella a squadre scambiate (rimesse a posto)."""
+    """(T, 3) probabilities of H, A, D: mean of the direct prediction and of the one with the teams swapped (swapped back)."""
     net, med, iqr, cols = model['net'], model['med'], model['iqr'], model['cols']
     dev = next(net.parameters()).device
     T = len(df)
@@ -222,7 +222,7 @@ def predict(model, df, it):
                 p = torch.softmax(net(torch.from_numpy(x[None]).to(dev)), -1)[0].cpu().numpy()
             if swap:
                 p = p[:, [1, 0, 2]]
-            a, b = sel[0], sel[-1] + 1      # da 5 a 25 frame al secondo: interpolazione tra i frame vicini
+            a, b = sel[0], sel[-1] + 1      # from 5 to 25 frames per second: interpolation between neighbouring frames
             grid = np.arange(a, b)
             full[a:b] = np.stack([np.interp(grid, sel, p[:, c]) for c in range(3)], axis=1)
         probs.append(full)
@@ -240,7 +240,7 @@ def save(model, path):
 
 
 def load(path):
-    """Il modello salvato, sul processore e in modalità previsione."""
+    """The saved model, on the CPU and in prediction mode."""
     obj = torch.load(path, map_location='cpu', weights_only=True)
     arch = obj.get('arch', 'v1')
     net = Net(obj['n_in'], arch=arch)

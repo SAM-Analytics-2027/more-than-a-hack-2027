@@ -1,19 +1,19 @@
-"""Più famiglie di modelli, con gli stessi dati, gli stessi gruppi di partite e lo stesso giudice.
+"""Several model families, with the same data, the same folds of matches and the same judge.
 
-Impostazione comune (quella vincente delle prove del 9 novembre):
-    - tracking sporcato di tutte e 30 le partite, etichette originali;
-    - colonna fonte_tv (SkillCorner sì/no) e frame SkillCorner a peso 1/4;
-    - più peso ai possessi brevi; scambio delle squadre per raddoppiare gli esempi;
-    - 5 gruppi di partite intere (esperimento.folds): ogni partita è prevista senza essere vista.
+Common setup (the winning one from the 9 November experiments):
+    - degraded tracking of all 30 matches, original labels;
+    - fonte_tv column (SkillCorner yes/no) and SkillCorner frames at weight 1/4;
+    - more weight to short possessions; team swap to double the examples;
+    - 5 folds of whole matches (esperimento.folds): every match is predicted without being seen.
 
-Famiglie:
-    xgb      XGBoost, numero di alberi scelto su partite tenute da parte (mai su quella giudicata)
-    lgbm     LightGBM, idem
-    cascata  due modelli LightGBM come Stefano: "palla ferma?" e "di quale squadra?" (solo a palla viva)
-    rete     rete neurale convoluzionale non causale sulla sequenza a 5 frame al secondo (±25 s di contesto)
+Families:
+    xgb      XGBoost, number of trees chosen on held-out matches (never on the judged one)
+    lgbm     LightGBM, same
+    cascade  two LightGBM models as in Stefano's: "dead ball?" and "which team?" (live ball only)
+    net      non-causal convolutional neural network on the sequence at 5 frames per second (±25 s of context)
 
-Le probabilità "fuori gruppo" vanno in data/cache_mv/oof_<famiglia>.npz e si giudicano come le altre
-(scegli.py). xgb, lgbm e cascata vogliono anche xgboost e lightgbm (non servono per il modello finale):
+The out-of-fold probabilities go to data/cache_mv/oof_<family>.npz and are judged like the others
+(scegli.py). xgb, lgbm and cascade also need xgboost and lightgbm:
 
     python modelli_mv/famiglie.py xgb
 """
@@ -33,7 +33,7 @@ from constants import TV_WEIGHT, SEED, THREADS, XGB_PARAMS, LGBM_PARAMS  # noqa:
 
 
 # --------------------------------------------------------------------------------------------------
-# Dati comuni
+# Common data
 # --------------------------------------------------------------------------------------------------
 
 def load():
@@ -44,7 +44,7 @@ def load():
 
 
 def rows(data, items, cols):
-    """Righe di allenamento (un frame ogni 8 per DFL/Metrica, ogni 16 a peso 2*TV_WEIGHT per SkillCorner, più scambio squadre)."""
+    """Training rows (one frame every 8 for DFL/Metrica, every 16 at weight 2*TV_WEIGHT for SkillCorner, plus team swap)."""
     E.WEIGHTS = True
     Xs, ys, ws = [], [], []
     for it in items:
@@ -60,22 +60,22 @@ def rows(data, items, cols):
 
 
 def split_inner(train_items, fold_of, k):
-    """Partite di allenamento tenute da parte per decidere quando fermarsi: quelle del gruppo successivo."""
+    """Training matches held out to decide when to stop: those of the next fold."""
     val = [it for it in train_items if fold_of[it] == (k + 1) % E.N_FOLDS]
     return [it for it in train_items if it not in val], val
 
 
 def save(name, oof, rounds=None):
     if rounds:
-        with open(os.path.join(dati.CACHE, 'alberi_{}.json'.format(name)), 'w') as f:
+        with open(os.path.join(dati.CACHE, 'trees_{}.json'.format(name)), 'w') as f:
             json.dump(rounds, f)
     path = os.path.join(dati.CACHE, 'oof_{}.npz'.format(name))
     np.savez_compressed(path, **{'{}__{}'.format(*it): p.astype(np.float32) for it, p in oof.items()})
-    print('salvate', path, flush=True)
+    print('saved', path, flush=True)
 
 
 def sym_predict(predict, df, cols):
-    """Media della previsione diretta e di quella a squadre scambiate (rimesse a posto)."""
+    """Mean of the direct prediction and of the one with the teams swapped (swapped back)."""
     X = df[cols]
     p1 = predict(X)
     p2 = predict(C.swap_teams(X)[cols])[:, [1, 0, 2]]
@@ -83,7 +83,7 @@ def sym_predict(predict, df, cols):
 
 
 # --------------------------------------------------------------------------------------------------
-# Boosting: XGBoost e LightGBM
+# Boosting: XGBoost and LightGBM
 # --------------------------------------------------------------------------------------------------
 
 def fit_xgb(Xtr, ytr, wtr, Xva, yva, wva):
@@ -129,12 +129,12 @@ def run_boosting(kind):
         rounds.append(int(best))
         for it in test:
             oof[it] = sym_predict(predict, data[it], cols)
-        print('{} gruppo {}: {} alberi, {:.0f} s'.format(kind, k, best, time.time() - t), flush=True)
+        print('{} fold {}: {} trees, {:.0f} s'.format(kind, k, best, time.time() - t), flush=True)
     save(kind, oof, rounds)
 
 
 def run_cascade():
-    """Come Stefano: P(D) da un modello "palla ferma?", P(H | palla viva) da un modello "di quale squadra?"."""
+    """As in Stefano's: P(D) from a "dead ball?" model, P(H | live ball) from a "which team?" model."""
     data, items, cols, fold_of = load()
     oof, rounds = {}, []
     for k in range(E.N_FOLDS):
@@ -156,16 +156,16 @@ def run_cascade():
         for it in test:
             oof[it] = sym_predict(predict, data[it], cols)
         rounds.append([int(bd), int(bt)])
-        print('cascata gruppo {}: {} + {} alberi, {:.0f} s'.format(k, bd, bt, time.time() - t), flush=True)
-    save('cascata', oof, rounds)
+        print('cascade fold {}: {} + {} trees, {:.0f} s'.format(k, bd, bt, time.time() - t), flush=True)
+    save('cascade', oof, rounds)
 
 
 # --------------------------------------------------------------------------------------------------
-# Rete neurale convoluzionale sulla sequenza: il codice sta in rete.py (serve PyTorch)
+# Convolutional neural network on the sequence: the code is in rete.py (needs PyTorch)
 # --------------------------------------------------------------------------------------------------
 
 def train_net(data, train, cols, seed):
-    """Allena la rete sulle partite `train`; restituisce una funzione che dà (T, 3) probabilità per una partita."""
+    """Trains the network on the matches `train`; returns a function that gives (T, 3) probabilities for a match."""
     import rete
     model = rete.train(data, train, cols, seed)
     return (lambda df, it: rete.predict(model, df, it)), model['per_epoch']
@@ -182,17 +182,17 @@ def run_net():
         predict, per_epoch = train_net(data, train, cols, SEED + k)
         for it in test:
             oof[it] = predict(data[it], it)
-        print('rete gruppo {}: {} passi per epoca, {:.0f} s'.format(k, per_epoch, time.time() - t), flush=True)
+        print('net fold {}: {} steps per epoch, {:.0f} s'.format(k, per_epoch, time.time() - t), flush=True)
     if os.environ.get('MV_SMOKE'):
-        print('prova veloce ok:', {it[1]: oof[it].shape for it in list(oof)[:2]})
+        print('smoke test ok:', {it[1]: oof[it].shape for it in list(oof)[:2]})
         return
-    save('rete', oof)
+    save('net', oof)
 
 
 def run_net_seed(seed_offset, name=None):
-    """La stessa rete con un altro seme casuale: se il punteggio cambia molto, il risultato era fortuna.
+    """The same network with another random seed: if the score changes a lot, the result was luck.
 
-    seed_offset 0 dà gli stessi semi di run_net (SEED + gruppo).
+    seed_offset 0 gives the same seeds as run_net (SEED + fold).
     """
     data, items, cols, fold_of = load()
     oof = {}
@@ -201,12 +201,12 @@ def run_net_seed(seed_offset, name=None):
         predict, _ = train_net(data, train, cols, SEED + 1000 * seed_offset + k)
         for it in [i for i in items if fold_of[i] == k]:
             oof[it] = predict(data[it], it)
-        print('rete seme {} gruppo {} fatto'.format(seed_offset, k), flush=True)
-    save(name or 'rete_seme{}'.format(seed_offset), oof)
+        print('net seed {} fold {} done'.format(seed_offset, k), flush=True)
+    save(name or 'net_seed{}'.format(seed_offset), oof)
 
 
 def run_net_source_out():
-    """Prova "fonte mai vista" per la rete: allenata su una fonte (+ SkillCorner a peso 1/4), giudicata sull'altra."""
+    """"Never-seen source" test for the network: trained on one source (+ SkillCorner at weight 1/4), judged on the other."""
     data, items, cols, _ = load()
     oof = {}
     for test_src, train_src in (('dfl', 'metrica'), ('metrica', 'dfl')):
@@ -214,28 +214,28 @@ def run_net_source_out():
         predict, _ = train_net(data, train, cols, SEED)
         for it in [i for i in items if i[0] == test_src]:
             oof[it] = predict(data[it], it)
-        print('rete fonte fuori: prova su {} fatta'.format(test_src), flush=True)
-    save('rete_fonte_fuori', oof)
+        print('net source out: test on {} done'.format(test_src), flush=True)
+    save('net_source_out', oof)
 
 
 # --------------------------------------------------------------------------------------------------
-# Modelli finali, allenati su tutte e 30 le partite, e risposte per il Barça
+# Final models, trained on all 30 matches, and answers for Barça
 # --------------------------------------------------------------------------------------------------
 
 def run_final(kind, seed_offset=0):
-    """Allena su tutte le partite con il numero di alberi mediano dei gruppi e salva le probabilità del Barça.
+    """Trains on all the matches with the median number of trees of the folds and saves the Barça probabilities.
 
-    Per la rete, seed_offset sceglie il seme: le versioni con semi diversi si fanno poi in media.
+    For the network, seed_offset picks the seed: the versions with different seeds are then averaged.
     """
     data, items, cols, _ = load()
     target = dati.load('barca', 'BAR-ATH')
-    target['fonte_tv'] = np.float32(0)          # il Barça ha una telecamera tattica, non le riprese tv
+    target['fonte_tv'] = np.float32(0)          # Barça has a tactical camera, not TV footage
     t = time.time()
-    if kind == 'rete':
+    if kind == 'net':
         predict, _ = train_net(data, items, cols, SEED + 1000 * seed_offset)
         proba = predict(target, ('barca', 'BAR-ATH'))
     else:
-        rounds = json.load(open(os.path.join(dati.CACHE, 'alberi_{}.json'.format(kind))))
+        rounds = json.load(open(os.path.join(dati.CACHE, 'trees_{}.json'.format(kind))))
         X, y, w = rows(data, items, cols)
         if kind == 'xgb':
             import xgboost as xgb
@@ -269,19 +269,19 @@ def run_final(kind, seed_offset=0):
                     d, h = bd.predict(Z.values), bt.predict(Z.values)
                     return np.stack([(1 - d) * h, (1 - d) * (1 - h), d], axis=1)
                 proba = sym_predict(predict, target, cols)
-    name = kind if not seed_offset else '{}_seme{}'.format(kind, seed_offset)
+    name = kind if not seed_offset else '{}_seed{}'.format(kind, seed_offset)
     np.save(os.path.join(dati.CACHE, 'barca_proba_{}.npy'.format(name)), proba.astype(np.float32))
-    print('finale {}: probabilità del Barça salvate ({:.0f} s)'.format(kind, time.time() - t), flush=True)
+    print('final {}: Barça probabilities saved ({:.0f} s)'.format(kind, time.time() - t), flush=True)
 
 
 if __name__ == '__main__':
     what = sys.argv[1]
-    if what == 'finale':
+    if what == 'final':
         run_final(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 0)
-    elif what == 'seme':
+    elif what == 'seed':
         run_net_seed(int(sys.argv[2]))
-    elif what == 'fonte_fuori':
+    elif what == 'source_out':
         run_net_source_out()
     else:
         {'xgb': lambda: run_boosting('xgb'), 'lgbm': lambda: run_boosting('lgbm'),
-         'cascata': run_cascade, 'rete': run_net}[what]()
+         'cascade': run_cascade, 'net': run_net}[what]()
