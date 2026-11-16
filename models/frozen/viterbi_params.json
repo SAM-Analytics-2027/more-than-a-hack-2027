@@ -1,0 +1,18 @@
+{
+ "params": {
+  "turn": 9.5,
+  "stop": 5.0,
+  "rest": 9.0,
+  "m_pos": 5,
+  "m_dead": 55,
+  "bias_d": -0.7,
+  "pen_no_touch": 2.0,
+  "touch_th": 2.5,
+  "m_pre": 50,
+  "pen_pre": 0.5,
+  "pen_same": 1.0
+ },
+ "nested": 0.7449,
+ "origin": "Viterbi tuned (coordinate search, 2 rounds, starting from START in constants.py) on the out-of-fold probabilities of the 10 DFL + Metrica matches; nested = mean spellF1 with the parameters tuned without the judged fold",
+ "units": "turn/stop/rest: costs of the changes; m_pos/m_dead: minimum durations in frames (25 per second); bias_d: push towards D"
+}
