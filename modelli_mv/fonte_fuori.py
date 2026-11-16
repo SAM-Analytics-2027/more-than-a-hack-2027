@@ -1,4 +1,4 @@
-"""Do the SkillCorner matches help to generalise to a NEVER-seen source? (the Barça situation)
+"""Do the SkillCorner matches help to generalise to a NEVER-seen source? (the Barça-Athletic situation)
 
 A whole source is left out and used as the test:
     test on DFL:      training on Metrica, with or without SkillCorner

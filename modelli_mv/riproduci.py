@@ -1,7 +1,7 @@
 """Il modello mv_hgb_rete3 (media di HGB + rete neurale a 3 semi, poi Viterbi), riproducibile su ogni computer.
 
     python modelli_mv/riproduci.py controlla [--solo-barca]   versioni delle librerie e impronte dei file dei dati
-    python modelli_mv/riproduci.py prevedi                    CSV del Barça dai pesi congelati (meno di 1 min)
+    python modelli_mv/riproduci.py prevedi                    CSV di Barça-Athletic dai pesi congelati (meno di 1 min)
     python modelli_mv/riproduci.py esterne                    risposte sulle 10 partite DFL + Metrica dai pesi
                                                               congelati, per la seconda pagina della dashboard (5 min)
     python modelli_mv/riproduci.py allena --nome NOME         rifà tutto da capo con il codice di oggi: 5 gruppi
@@ -222,7 +222,7 @@ def _params(root):
 
 
 # --------------------------------------------------------------------------------------------------
-# prevedi: il Barça
+# prevedi: Barça-Athletic
 # --------------------------------------------------------------------------------------------------
 
 def _possessions(codes, period):
@@ -249,7 +249,7 @@ def predict(root=FROZEN, name=NAME, write=False):
         if not os.path.exists(os.path.join(dati.C.fc.DATA_DIR, f)):
             sys.exit('manca data/{}: servono i file della gara in data/tactical/'.format(f))
     target = dati.table(dati.BARCA)                  # sempre ricalcolate: mai da una cache vecchia
-    target['fonte_tv'] = np.float32(0)              # il Barça ha una telecamera tattica, non le riprese tv
+    target['fonte_tv'] = np.float32(0)              # Barça-Athletic ha una telecamera tattica, non le riprese tv
     proba = ensemble_proba(load_components(os.path.join(root, 'finale')), target, dati.BARCA)
     codes = _decode(proba, target, _params(root))
     out = os.path.join(RESULTS, name + '.csv')
@@ -259,7 +259,7 @@ def predict(root=FROZEN, name=NAME, write=False):
            'finestra_pubblica': _public_window(codes)}
     valid = subprocess.run([sys.executable, os.path.join(ROOT, 'evaluation', 'validate_submission.py'), out],
                            capture_output=True, text=True)
-    print('Barça: scritto {} ({:.0f} s), formato {}'.format(os.path.relpath(out, ROOT), time.time() - t,
+    print('Barça-Athletic: scritto {} ({:.0f} s), formato {}'.format(os.path.relpath(out, ROOT), time.time() - t,
                                                            'valido' if valid.returncode == 0 else 'NON VALIDO'))
     print('   possessi {}  conteggi {}'.format(got['possessi'], got['conteggi']))
     print('   5 minuti pubblici (prima pagina della dashboard): spellF1 {spellF1}  macroF1 {macroF1}'.format(
@@ -406,7 +406,7 @@ def train(name, freeze=False):
                         'bias_d: spinta verso D'},
               open(os.path.join(root, 'parametri_viterbi.json'), 'w'), indent=1)
     print('   parametri {}  annidato {}'.format(params, nested))
-    print('3. Modello finale per il Barça, allenato su tutte e 30 le partite')
+    print('3. Modello finale per Barça-Athletic, allenato su tutte e 30 le partite')
     fit_components(data, items, cols, os.path.join(root, 'finale'), [SEED + 1000 * s for s in range(N_NETS)])
     print('4. Risultati ({:.0f} min)'.format((time.time() - t0) / 60))
     out_name = NAME if freeze else name

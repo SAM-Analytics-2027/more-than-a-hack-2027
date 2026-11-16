@@ -1,8 +1,7 @@
 """DFL labels without ricochets: brings them closer to the possession definition of the rules (CHALLENGE.md).
 
 DFL changes possession at every touch; the rules say that a touch without control, a deflection or a
-ricochet does not change possession. The filter is Stefano's (possession_model/dfl_dataset.py, branch ste),
-with his thresholds, rewritten for our files. It uses the CLEAN tracking, where the ball is clearly visible:
+ricochet does not change possession. The filter uses the CLEAN tracking, where the ball is clearly visible:
 
 - only short possessions (at most 1.6 s) next to other live play are considered;
 - if the ball goes between at least two team-mates (a real pass) the possession stays;

@@ -58,7 +58,7 @@ def main(name, params_file, sources, flag=False, ev_name=None):
     target = dati.load('barca', 'BAR-ATH')
     if flag:
         E.add_source_flag(data)
-        target['fonte_tv'] = np.float32(0)      # Barça has a tactical camera, not TV footage
+        target['fonte_tv'] = np.float32(0)      # Barça-Athletic has a tactical camera, not TV footage
     cols = E.feature_cols(next(iter(data.values())))
     tag = name
     params = json.load(open(os.path.join(dati.CACHE, params_file)))['params']

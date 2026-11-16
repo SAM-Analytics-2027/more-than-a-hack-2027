@@ -263,11 +263,11 @@ def build_dashboard_payload() -> dict:
 
 
 # ------------------------------------------------------------------------------------------------
-# Seconda pagina: le 10 partite esterne (7 DFL + 3 Metrica), sporcate come il Barça
+# Seconda pagina: le 10 partite esterne (7 DFL + 3 Metrica), sporcate come Barça-Athletic
 # ------------------------------------------------------------------------------------------------
 # La soluzione vera di ogni partita sta in data/altre_partite/<fonte>_pulite/<id>/<id>_possession_gt.csv
 # (le etichette originali, mai corrette). Le risposte dei modelli stanno in
-# data/risultati_esterne/<modello>/<id>.csv, nello stesso formato del file del Barça (frame,label), e
+# data/risultati_esterne/<modello>/<id>.csv, nello stesso formato del file di Barça-Athletic (frame,label), e
 # devono essere previste SENZA aver visto quella partita in allenamento. Tutto resta dentro data/,
 # quindi GitHub non lo vede.
 
@@ -321,7 +321,7 @@ def _ext_teams(xml_path: str) -> tuple:
 
 
 def _with_halftime_gap(codes: np.ndarray, halves: list) -> np.ndarray:
-    """Un frame X tra i due tempi: nessun possesso può scavalcare l'intervallo, come nel Barça."""
+    """Un frame X tra i due tempi: nessun possesso può scavalcare l'intervallo, come in Barça-Athletic."""
     if len(halves) < 2:
         return codes
     cut = halves[1][1]
@@ -329,7 +329,7 @@ def _with_halftime_gap(codes: np.ndarray, halves: list) -> np.ndarray:
 
 
 def _ext_compare(gt_codes: np.ndarray, pred_codes: np.ndarray, halves: list, fps: float) -> dict:
-    """Gli stessi numeri della tabella del Barça, ma sull'intera partita."""
+    """Gli stessi numeri della tabella di Barça-Athletic, ma sull'intera partita."""
     g = _with_halftime_gap(gt_codes, halves)
     p = _with_halftime_gap(pred_codes, halves)
     ev = pm.evaluate(g, p)

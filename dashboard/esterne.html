@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -24,7 +25,11 @@
       --primary: #2563eb;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
@@ -91,7 +96,12 @@
       cursor: pointer;
       transition: background 0.12s, border-color 0.12s;
     }
-    button:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+    button:hover {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+    }
+
     button.active-preset {
       background: #eff6ff;
       border-color: #2563eb;
@@ -127,7 +137,14 @@
       font-size: 13px;
       color: var(--text-sec);
     }
-    .leg-item { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+
+    .leg-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+    }
+
     .swatch {
       width: 13px;
       height: 13px;
@@ -143,6 +160,7 @@
       gap: 8px;
       margin-bottom: 10px;
     }
+
     .toggle-chip {
       display: inline-flex;
       align-items: center;
@@ -157,8 +175,15 @@
       font-weight: 600;
       color: var(--text);
     }
-    .toggle-chip:hover { background: #f1f5f9; }
-    .toggle-chip input { accent-color: var(--primary); cursor: pointer; }
+
+    .toggle-chip:hover {
+      background: #f1f5f9;
+    }
+
+    .toggle-chip input {
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
 
     .canvas-wrap {
       position: relative;
@@ -169,21 +194,34 @@
       background: #ffffff;
       cursor: grab;
     }
-    .canvas-wrap:active { cursor: grabbing; }
-    canvas#timelineCanvas { display: block; width: 100%; }
+
+    .canvas-wrap:active {
+      cursor: grabbing;
+    }
+
+    canvas#timelineCanvas {
+      display: block;
+      width: 100%;
+    }
 
     /* Tables */
-    .table-wrap { overflow-x: auto; }
+    .table-wrap {
+      overflow-x: auto;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
     }
-    th, td {
+
+    th,
+    td {
       padding: 11px 12px;
       text-align: left;
       border-bottom: 1px solid var(--border-soft);
       vertical-align: middle;
     }
+
     th {
       background: #f8fafc;
       color: var(--text-sec);
@@ -193,16 +231,24 @@
       border-bottom: 1px solid var(--border);
       white-space: nowrap;
     }
-    th.num, td.num { text-align: right; }
 
-    tbody tr:hover { background: #f8fafc; }
+    th.num,
+    td.num {
+      text-align: right;
+    }
+
+    tbody tr:hover {
+      background: #f8fafc;
+    }
 
     tr.gt-ref-row {
       background: #fefce8 !important;
     }
+
     tr.gt-ref-row td {
       border-bottom: 2px solid #facc15;
     }
+
     tr.selected-row {
       background: #eff6ff !important;
     }
@@ -213,6 +259,7 @@
       color: var(--text);
       white-space: nowrap;
     }
+
     .val-sub {
       font-size: 12.5px;
       color: var(--muted);
@@ -232,6 +279,7 @@
       margin-left: 6px;
       vertical-align: 1px;
     }
+
     .tag-gt {
       display: inline-block;
       font-size: 11px;
@@ -253,9 +301,21 @@
       border-radius: 5px;
       margin-left: 5px;
     }
-    .diff-good { background: #dcfce7; color: #15803d; }
-    .diff-warn { background: #fef3c7; color: #b45309; }
-    .diff-bad  { background: #fee2e2; color: #b91c1c; }
+
+    .diff-good {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .diff-warn {
+      background: #fef3c7;
+      color: #b45309;
+    }
+
+    .diff-bad {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
 
     /* Tooltip */
     .hover-tooltip {
@@ -272,6 +332,7 @@
       display: none;
       min-width: 245px;
     }
+
     .tt-title {
       font-weight: 700;
       color: var(--text);
@@ -279,6 +340,7 @@
       border-bottom: 1px solid #e2e8f0;
       padding-bottom: 4px;
     }
+
     .tt-row {
       display: flex;
       justify-content: space-between;
@@ -286,6 +348,7 @@
       gap: 14px;
       padding: 2px 0;
     }
+
     .pill {
       display: inline-block;
       padding: 1px 7px;
@@ -294,36 +357,101 @@
       font-size: 12px;
       color: #ffffff;
     }
-    .pill-H { background: var(--barca); }
-    .pill-A { background: var(--athletic); }
-    .pill-D { background: #64748b; }
-    .pill-X { background: #e2e8f0; color: #475569; }
 
-    .nav-bar { display: flex; gap: 8px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+    .pill-H {
+      background: var(--barca);
+    }
+
+    .pill-A {
+      background: var(--athletic);
+    }
+
+    .pill-D {
+      background: #64748b;
+    }
+
+    .pill-X {
+      background: #e2e8f0;
+      color: #475569;
+    }
+
+    .nav-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
     .nav-bar a {
-      text-decoration: none; font-weight: 600; font-size: 13.5px; color: var(--text-sec);
-      background: var(--card); border: 1px solid var(--border); padding: 6px 14px; border-radius: 999px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 13.5px;
+      color: var(--text-sec);
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 999px;
     }
-    .nav-bar a.nav-active { background: var(--primary); color: #ffffff; border-color: var(--primary); }
-    .nav-note { font-size: 12.5px; color: var(--muted); margin-left: 6px; }
+
+    .nav-bar a.nav-active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+
+    .nav-note {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+
     .note-box {
-      font-size: 13px; color: var(--text-sec); background: #f8fafc; border: 1px solid var(--border-soft);
-      border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--text-sec);
+      background: #f8fafc;
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
     }
+
     select.match-select {
-      font-size: 13.5px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
-      border: 1px solid var(--border); background: #ffffff; color: var(--text);
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text);
     }
-    td.cell-score { text-align: right; cursor: pointer; font-weight: 600; }
-    td.cell-best { outline: 2px solid #16a34a; outline-offset: -2px; }
-    th.cell-match { text-align: right; cursor: pointer; }
-    th.cell-match.cur { color: var(--primary); }
+
+    td.cell-score {
+      text-align: right;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    td.cell-best {
+      outline: 2px solid #16a34a;
+      outline-offset: -2px;
+    }
+
+    th.cell-match {
+      text-align: right;
+      cursor: pointer;
+    }
+
+    th.cell-match.cur {
+      color: var(--primary);
+    }
   </style>
 </head>
+
 <body>
 
   <nav class="nav-bar">
-    <a href="/">Barça — 5 minuti pubblici</a>
+    <a href="/">Barça-Athletic — 5 minuti pubblici</a>
     <a href="/esterne" class="nav-active">Partite esterne (DFL + Metrica)</a>
     <span class="nav-note">I 5 minuti servono a controllare; per scegliere un modello si guarda questa pagina.</span>
   </nav>
@@ -339,7 +467,8 @@
     <div class="note-box">
       Ogni modello è giudicato sulle partite intere, con le <b>etichette originali</b> e lo stesso codice ufficiale
       del punteggio. Le risposte vanno in <code id="resultsDir"></code><code>/&lt;modello&gt;/&lt;partita&gt;.csv</code>
-      (stesso formato del file del Barça) e devono essere previste <b>senza aver visto quella partita in allenamento</b>.
+      (stesso formato del file di Barça-Athletic) e devono essere previste <b>senza aver visto quella partita in
+        allenamento</b>.
       La media è sulle partite; accanto, la media per fonte e la <b>stabilità</b> (la partita peggiore e la migliore):
       un modello affidabile ha la media alta e l'ampiezza piccola.
     </div>
@@ -371,7 +500,10 @@
       </div>
     </div>
     <div class="table-wrap">
-      <table id="tableGrid"><thead></thead><tbody></tbody></table>
+      <table id="tableGrid">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
     </div>
   </section>
 
@@ -384,8 +516,10 @@
         <span class="context-pill" id="rangeInfo"></span>
       </div>
       <div class="legend-bar">
-        <span class="leg-item"><span class="swatch" style="background:var(--barca)"></span> <span id="legHome">Casa (H)</span></span>
-        <span class="leg-item"><span class="swatch" style="background:var(--athletic)"></span> <span id="legAway">Ospiti (A)</span></span>
+        <span class="leg-item"><span class="swatch" style="background:var(--barca)"></span> <span id="legHome">Casa
+            (H)</span></span>
+        <span class="leg-item"><span class="swatch" style="background:var(--athletic)"></span> <span id="legAway">Ospiti
+            (A)</span></span>
         <span class="leg-item"><span class="swatch" style="background:var(--dead)"></span> Gioco Fermo (D)</span>
         <span class="leg-item"><span class="swatch" style="background:var(--ok)"></span> Corretto</span>
         <span class="leg-item"><span class="swatch" style="background:var(--err)"></span> Errore</span>
@@ -627,11 +761,11 @@
         <tr class="${s.name === selectedModel ? 'selected-row' : ''}">
           <td><div class="val-main">${s.name}${tagOf(s.name, s.is_baseline)}</div></td>
           ${DATA.matches.map((m, i) => {
-            const v = s.per_match[m.id];
-            if (v === undefined) return `<td class="cell-score" data-match="${i}">—</td>`;
-            const best = bestOf[i] !== null && v >= bestOf[i] - 1e-12;
-            return `<td class="cell-score ${best ? 'cell-best' : ''}" data-match="${i}">${fmt1(v)}</td>`;
-          }).join("")}
+        const v = s.per_match[m.id];
+        if (v === undefined) return `<td class="cell-score" data-match="${i}">—</td>`;
+        const best = bestOf[i] !== null && v >= bestOf[i] - 1e-12;
+        return `<td class="cell-score ${best ? 'cell-best' : ''}" data-match="${i}">${fmt1(v)}</td>`;
+      }).join("")}
         </tr>`).join("");
       document.querySelectorAll("#tableGrid [data-match]").forEach(c => c.addEventListener("click", () => {
         pickMatch(parseInt(c.getAttribute("data-match"), 10));
@@ -884,4 +1018,5 @@
     loadData();
   </script>
 </body>
+
 </html>

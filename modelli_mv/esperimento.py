@@ -51,7 +51,7 @@ def feature_cols(df):
 
 
 def short_spell_weights(y, period):
-    """Weight of each frame: short possessions weigh more, long ones less (Stefano's idea).
+    """Weight of each frame: short possessions weigh more, long ones less.
 
     w = sqrt(median duration / possession duration), between 1/3 and 3; dead-ball frames weigh 1.
     """
@@ -107,7 +107,7 @@ def predict_sym(model, df, cols):
 
 
 def add_source_flag(data):
-    """Column 'fonte_tv': 1 for the SkillCorner matches (tracking from TV footage), 0 for the others and for Barça."""
+    """Column 'fonte_tv': 1 for the SkillCorner matches (tracking from TV footage), 0 for the others and for Barça-Athletic."""
     for it, df in data.items():
         df['fonte_tv'] = np.float32(it[0] == 'skillcorner')
     return data
@@ -302,7 +302,7 @@ def _write_labels(path, codes):
 def export_external(name, params_file, out_name):
     """Out-of-training answers on the 10 DFL and Metrica matches, for the dashboard page on the external matches.
 
-    One folder per model: data/risultati_esterne/<out_name>/<match>.csv, in the same format as the Barça file.
+    One folder per model: data/risultati_esterne/<out_name>/<match>.csv, in the same format as the Barça-Athletic file.
     """
     oof = load_oof(name)
     params = json.load(open(os.path.join(dati.CACHE, params_file)))['params']

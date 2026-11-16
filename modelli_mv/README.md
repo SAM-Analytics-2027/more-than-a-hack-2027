@@ -5,12 +5,12 @@ Questa cartella contiene il nostro modello migliore, **`mv_hgb_rete3`**, congela
 | cosa | dove si vede | spellF1 | altro |
 |---|---|---|---|
 | 10 partite esterne DFL + Metrica | dashboard, seconda pagina | **0,7406** (nella dashboard: 74,1) | macroF1 0,9376 · DFL 0,704 · Metrica 0,826 · partita peggiore 0,644 |
-| 5 minuti pubblici del Barça | dashboard, prima pagina | **0,7636** (nella dashboard: 76,4) | macroF1 0,9434 (94,3) |
-| CSV del Barça | `evaluation/results/mv_hgb_rete3.csv` | — | 321 possessi; H 49.972 · A 32.337 · D 76.548 · X 40.462 frame |
+| 5 minuti pubblici di Barça-Athletic | dashboard, prima pagina | **0,7636** (nella dashboard: 76,4) | macroF1 0,9434 (94,3) |
+| CSV di Barça-Athletic | `evaluation/results/mv_hgb_rete3.csv` | — | 321 possessi; H 49.972 · A 32.337 · D 76.548 · X 40.462 frame |
 
 "Esattamente" vuol dire che lo script confronta l'impronta SHA-256 di ogni file prodotto con quella del riferimento e scrive `IDENTICO`.
 
-Il modello si giudica e si sceglie sulle **10 partite esterne**. I 5 minuti pubblici servono solo a controllare il file del Barça: le regole vietano di usarli per regolare il modello.
+Il modello si giudica e si sceglie sulle **10 partite esterne**. I 5 minuti pubblici servono solo a controllare il file di Barça-Athletic: le regole vietano di usarli per regolare il modello.
 
 In breve, i passi sono:
 
@@ -36,7 +36,7 @@ Sotto, ogni passo nel dettaglio.
 - **git** e **conda**: Anaconda o Miniconda, va bene qualunque versione recente.
 - **Almeno 10 GB liberi**: circa 3,5 GB di dati, 1,6 GB di cache, circa 2 GB per l'ambiente Python.
 - **I file della gara** (Barça–Athletic), dal download dell'hackathon.
-- **Le 30 partite esterne**, dal Drive di Matteo. Servono solo per `esterne` e `allena`; per `prevedi` no.
+- **Le 30 partite esterne**, dal Drive. Servono solo per `esterne` e `allena`; per `prevedi` no.
 
 Su **Windows** tutti i comandi vanno scritti nell'**Anaconda Prompt** (Start → "Anaconda Prompt"), non nel Prompt dei comandi normale. I percorsi con `/` funzionano anche su Windows.
 
@@ -85,7 +85,7 @@ data/
 ├── tactical/                                  ← dal download dell'hackathon
 │   ├── BAR-ATH_tactical_atd.txt
 │   └── BAR-ATH_tactical_atd.xml
-└── altre_partite/                             ← dal Drive di Matteo
+└── altre_partite/                             ← dal Drive
     ├── dfl_sporcate/<id>/<id>_atd.txt         l'input del modello (tracking sporcato)
     ├── dfl_sporcate/<id>/<id>_atd.xml
     ├── dfl_pulite/<id>/<id>_possession_gt.csv  la risposta giusta (solo per allenare e giudicare)
@@ -128,7 +128,7 @@ python modelli_mv/riproduci.py prevedi
 In meno di 1 minuto scrive `evaluation/results/mv_hgb_rete3.csv`. Deve stampare:
 
 ```
-Barça: scritto evaluation/results/mv_hgb_rete3.csv (15 s), formato valido
+Barça-Athletic: scritto evaluation/results/mv_hgb_rete3.csv (15 s), formato valido
    possessi 321  conteggi {'H': 49972, 'A': 32337, 'D': 76548, 'X': 40462}
    5 minuti pubblici (prima pagina della dashboard): spellF1 0.7636  macroF1 0.9434
    RISULTATO: IDENTICO al riferimento (stesse impronte SHA-256).
@@ -175,7 +175,7 @@ Per ogni frame dice H, A, D o X.
    - i giocatori vicini alla palla;
    - i tocchi (chi ha toccato per ultimo, chi tocca dopo, i tocchi di fila);
    - le medie su finestre di tempo;
-   - `fonte_tv` (1 per SkillCorner, 0 per tutto il resto, Barça compreso).
+   - `fonte_tv` (1 per SkillCorner, 0 per tutto il resto, Barça-Athletic compreso).
 
    Il campo è girato in modo che la squadra di casa attacchi sempre verso destra.
 2. **Quattro modelli di probabilità** H/A/D:
@@ -190,8 +190,8 @@ Per ogni frame dice H, A, D o X.
 - **Dati:** le 30 partite esterne. L'input è il tracking sporcato, le etichette vengono dalle versioni pulite. I frame SkillCorner pesano 1/4; i possessi brevi pesano di più. Ogni partita entra anche con le squadre scambiate.
 - **Validazione:** 5 gruppi di partite intere, bilanciati per fonte (seme 2027). Per ogni gruppo si allenano i 4 modelli sulle altre partite e si prevede il gruppo. Sono i pesi in `congelato/gruppi/`.
 - **Viterbi:** i parametri si regolano sulle previsioni delle 10 partite DFL + Metrica: ricerca per coordinate, 2 giri, partendo da `START`. Il punteggio "annidato", con i parametri regolati senza il gruppo giudicato, è 0,7403.
-- **Modello finale:** gli stessi 4 modelli allenati su tutte e 30 le partite. Sono i pesi in `congelato/finale/`, e prevedono il Barça.
-- **Il Barça non entra mai** né nell'allenamento né nella regolazione.
+- **Modello finale:** gli stessi 4 modelli allenati su tutte e 30 le partite. Sono i pesi in `congelato/finale/`, e prevedono Barça-Athletic.
+- **Barça-Athletic non entra mai** né nell'allenamento né nella regolazione.
 
 ## Partire da qui per migliorarlo
 
@@ -240,14 +240,14 @@ Cambia il codice, poi lancia `allena` con un nome nuovo. Usa le tue iniziali e u
 
 ### 5. Nuovo riferimento
 
-Quando una prova batte chiaramente il riferimento, sulle 10 partite e sopra il rumore, la si congela al suo posto in `modelli_mv/congelato/`. Lo fa Matteo, con `allena --congela`, e poi la pubblica. Così tutti ripartono di nuovo dallo stesso punto.
+Quando una prova batte chiaramente il riferimento, sulle 10 partite e sopra il rumore, la si congela al suo posto in `modelli_mv/congelato/` con il comando `allena --congela`, e poi la pubblica. Così tutti ripartono di nuovo dallo stesso punto.
 
 ---
 
 ## Cosa va su GitHub e cosa no
 
 - **Sì:** il codice in `modelli_mv/` e `modelli_mv/congelato/` (pesi, parametri e impronte, 46 MB, nessun file sopra 5 MB).
-- **No:** `data/` (dati, cache, pesi delle prove, risultati esterni) ed `evaluation/results/*.csv`, il CSV del Barça. Sono già esclusi da `.gitignore`. Il CSV del Barça non va mai pubblicato.
+- **No:** `data/` (dati, cache, pesi delle prove, risultati esterni) ed `evaluation/results/*.csv`, il CSV di Barça-Athletic. Sono già esclusi da `.gitignore`. Il CSV di Barça-Athletic non va mai pubblicato.
 
 ## Problemi
 
@@ -258,7 +258,7 @@ Quando una prova batte chiaramente il riferimento, sulle 10 partite e sopra il r
 | `controlla`: `<-- serve x.y.z` | versione sbagliata: `conda env remove -n mtah`, poi rifai il passo 2 |
 | `controlla`: `MANCA data/...` | il file non c'è o è nel percorso sbagliato: confronta con l'albero del passo 3 |
 | `controlla`: `DIVERSO data/...` | la tua copia non è quella del riferimento: riscaricala dal Drive. Gli a capo Windows non contano |
-| `prevedi` o `esterne`: `diverso da quello atteso`, ma `controlla` dice "Tutto in ordine." | manda a Matteo l'output completo dei tre comandi |
+| `prevedi` o `esterne`: `diverso da quello atteso`, ma `controlla` dice "Tutto in ordine." |
 | `non trovo i pesi di "<nome>"` | la cartella `data/cache_mv/modelli/<nome>/` non c'è, oppure il nome è scritto diverso |
 | `allena` lentissimo | senza scheda grafica la rete si allena sul processore e ci vogliono ore. Su Windows con una scheda NVIDIA installa torch con CUDA: la rete la usa da sola. Si può imporre il dispositivo con `MV_DEVICE=cpu`, `cuda` o `mps`. Per `prevedi` ed `esterne` non serve |
 | `allena --nome mv_hgb_rete3` rifiutato | è il nome del riferimento: scegline un altro |
@@ -269,7 +269,7 @@ Quando una prova batte chiaramente il riferimento, sulle 10 partite e sopra il r
 | file | cosa fa |
 |---|---|
 | `riproduci.py` | i comandi `controlla`, `prevedi`, `esterne`, `allena`, e la ricetta del modello |
-| `congelato/` | il riferimento: `finale/` (modello per il Barça), `gruppi/gruppo0-4/` (modelli della validazione), `parametri_viterbi.json`, `attesi.json` e `attesi_esterne.json` (risultati attesi con le loro impronte), `dati_attesi.json` (impronte dei 92 file di dati) |
+| `congelato/` | il riferimento: `finale/` (modello per Barça-Athletic), `gruppi/gruppo0-4/` (modelli della validazione), `parametri_viterbi.json`, `attesi.json` e `attesi_esterne.json` (risultati attesi con le loro impronte), `dati_attesi.json` (impronte dei 92 file di dati) |
 | `environment.yml`, `requirements.txt` | le versioni esatte delle librerie |
 | `formato_comune.py` | legge i file di tracking (FIFA EPTS) |
 | `caratteristiche.py` | le 142 caratteristiche per frame e lo scambio delle squadre |

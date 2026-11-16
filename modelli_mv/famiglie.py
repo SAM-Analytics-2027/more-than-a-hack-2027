@@ -9,7 +9,7 @@ Common setup (the winning one from the 9 November experiments):
 Families:
     xgb      XGBoost, number of trees chosen on held-out matches (never on the judged one)
     lgbm     LightGBM, same
-    cascade  two LightGBM models as in Stefano's: "dead ball?" and "which team?" (live ball only)
+    cascade  two LightGBM models: "dead ball?" and "which team?" (live ball only)
     net      non-causal convolutional neural network on the sequence at 5 frames per second (±25 s of context)
 
 The out-of-fold probabilities go to data/cache_mv/oof_<family>.npz and are judged like the others
@@ -134,7 +134,7 @@ def run_boosting(kind):
 
 
 def run_cascade():
-    """As in Stefano's: P(D) from a "dead ball?" model, P(H | live ball) from a "which team?" model."""
+    """P(D) from a "dead ball?" model, P(H | live ball) from a "which team?" model."""
     data, items, cols, fold_of = load()
     oof, rounds = {}, []
     for k in range(E.N_FOLDS):
@@ -219,17 +219,17 @@ def run_net_source_out():
 
 
 # --------------------------------------------------------------------------------------------------
-# Final models, trained on all 30 matches, and answers for Barça
+# Final models, trained on all 30 matches, and answers for Barça-Athletic
 # --------------------------------------------------------------------------------------------------
 
 def run_final(kind, seed_offset=0):
-    """Trains on all the matches with the median number of trees of the folds and saves the Barça probabilities.
+    """Trains on all the matches with the median number of trees of the folds and saves the Barça-Athletic probabilities.
 
     For the network, seed_offset picks the seed: the versions with different seeds are then averaged.
     """
     data, items, cols, _ = load()
     target = dati.load('barca', 'BAR-ATH')
-    target['fonte_tv'] = np.float32(0)          # Barça has a tactical camera, not TV footage
+    target['fonte_tv'] = np.float32(0)          # Barça-Athletic has a tactical camera, not TV footage
     t = time.time()
     if kind == 'net':
         predict, _ = train_net(data, items, cols, SEED + 1000 * seed_offset)
@@ -271,7 +271,7 @@ def run_final(kind, seed_offset=0):
                 proba = sym_predict(predict, target, cols)
     name = kind if not seed_offset else '{}_seed{}'.format(kind, seed_offset)
     np.save(os.path.join(dati.CACHE, 'barca_proba_{}.npy'.format(name)), proba.astype(np.float32))
-    print('final {}: Barça probabilities saved ({:.0f} s)'.format(kind, time.time() - t), flush=True)
+    print('final {}: Barça-Athletic probabilities saved ({:.0f} s)'.format(kind, time.time() - t), flush=True)
 
 
 if __name__ == '__main__':
