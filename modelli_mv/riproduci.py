@@ -92,7 +92,7 @@ def check(write=False, only_barca=False):
     if not platform.python_version().startswith('3.11.'):
         print('   ATTENZIONE python {}: serve 3.11'.format(platform.python_version()))
         ok = False
-    for line in open(os.path.join(HERE, 'requirements.txt'), encoding='utf-8'):
+    for line in open(os.path.join(os.path.dirname(HERE), 'requirements.txt'), encoding='utf-8'):
         line = line.split('#')[0].strip()
         if '==' not in line:
             continue
