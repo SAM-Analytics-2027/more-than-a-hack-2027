@@ -77,3 +77,7 @@ artifacts/possession_arm_v1/loo/
 # -- transient pip working dirs (the slow wheels install creates them in the repo root) ---------
 pip-metadata-*/
 pip-unpack-*/
+
+# Exclude final submission files, but keep the intermediate test/evaluation baseline
+SAM-Analytics-2027.csv
+!SAM-model.csv

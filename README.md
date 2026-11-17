@@ -12,9 +12,9 @@ The method is described in the technical report [`SAM-Analytics-2027.md`](SAM-An
 - [Data Placement](#data-placement)
 - [Reproducing the Submission (`SAM-Analytics-2027.csv`)](#reproducing-the-submission-sam-analytics-2027csv)
 - [Other Commands](#other-commands)
-- [Repository Layout](#repository-layout)
 - [External Training Datasets, Licenses & Citations](#external-training-datasets-licenses--citations)
 - [Code License](#code-license)
+- [Authors](#authors)
 
 ---
 
@@ -28,16 +28,6 @@ If `conda` is not installed on your system, install [Miniconda](https://docs.con
 conda env create -f models/environment.yml
 conda activate mtah
 ```
-
-### pip
-
-With Python 3.11:
-
-```bash
-pip install -r requirements.txt
-```
-
-Both files pin the exact versions (Python 3.11, numpy, pandas, pyarrow, scikit-learn, scipy, joblib, numba, llvmlite, PyTorch, LightGBM). With these versions the submission file is reproduced bit for bit; the same file was also obtained on Windows with Python 3.12.
 
 ---
 
@@ -69,7 +59,7 @@ chmod +x reproduce.sh
 The script runs four steps in under a minute:
 
 1. `python models/reproduce.py check --barca-only` checks the library versions and the SHA-256 fingerprints of the two competition tracking files;
-2. `python models/reproduce.py predict` computes the features of the competition match, applies the frozen model in `models/frozen/` and writes `evaluation/results/SAM-model.csv`; it prints `RESULT: IDENTICAL to the reference` when the file has the expected SHA-256 fingerprint;
+2. `python models/reproduce.py predict` computes the features of the competition match, applies the frozen model in `models/frozen/` and writes `evaluation/results/SAM-model.csv`;
 3. copies it to `SAM-Analytics-2027.csv`;
 4. validates it with `evaluation/validate_submission.py`.
 
@@ -81,7 +71,7 @@ All from the repository root, with the `mtah` environment active:
 
 | command | what it does |
 |---|---|
-| `python models/reproduce.py check` | library versions and fingerprints of all 92 data files (competition match and external matches) |
+| `python models/reproduce.py check` | library versions and fingerprints of every data files |
 | `python models/reproduce.py predict` | Barça–Athletic CSV from the frozen weights (`evaluation/results/SAM-model.csv`) |
 | `python models/reproduce.py external` | out-of-fold answers on the 10 DFL + Metrica matches from the frozen fold models (`data/external_results/SAM-model/`), with their spellF1 |
 | `python models/reproduce.py train --name NAME` | retrains everything from the external matches: 5 folds, Viterbi tuning, final model (weights in `data/cache/models/NAME/`) |
@@ -97,38 +87,13 @@ The first run of `external` or `train` builds a feature cache in `data/cache/` (
 
 ---
 
-## Repository Layout
-
-```
-models/                     the possession model
-  reproduce.py              entry point: check, predict, external, train
-  features.py               per-frame features from the tracking
-  epts_reader.py            reader of the competition tracking format (FIFA EPTS)
-  dataset.py                the 30 external matches and the feature cache
-  cross_validation.py       folds, training rows, HGB, Viterbi tuning
-  model_families.py         LightGBM / XGBoost families and training rows
-  tcn.py                    temporal convolutional network
-  decoder.py                Viterbi decoder with minimum durations, and the score
-  dfl_ricochet_filter.py    optional ricochet filter for the DFL labels (experiment)
-  constants.py              every constant and hyperparameter
-  environment.yml           conda environment
-  frozen/                   the frozen model: final/, folds/fold0..4/, Viterbi parameters, expected fingerprints
-data_prep/                  scripts that prepare and degrade the external matches
-dashboard/                  read-only comparison web app
-evaluation/, starter/, rules/, games.py   official competition files
-reproduce.sh, reproduce.bat              one-command reproduction
-SAM-Analytics-2027.md                    technical report
-```
-
----
-
 ## External Training Datasets, Licenses & Citations
 
 | Dataset | Competition / Season | Matches Used | Tracking Source | License | Repository |
 | :--- | :--- | :---: | :--- | :--- | :--- |
 | **DFL / IDSSE Open Data** | German Bundesliga (1st & 2nd Div., 2022/2023) | 7 | Optical TRACAB (25 fps) | CC BY 4.0 | [spoho-datascience/idsse-data](https://github.com/spoho-datascience/idsse-data) |
 | **Metrica Sports Sample Data** | Anonymized Elite Matches | 3 | Optical Tracking (25 fps) | Open Sample (Attribution) | [metrica-sports/sample-data](https://github.com/metrica-sports/sample-data) |
-| **SkillCorner Open Data** | Australian A-League (2024/2025) | 20 (19 in the final model) | Broadcast Tracking (10 fps) | MIT License | [SkillCorner/opendata](https://github.com/SkillCorner/opendata) |
+| **SkillCorner Open Data** | Australian A-League (2024/2025) | 20 | Broadcast Tracking (10 fps) | MIT License | [SkillCorner/opendata](https://github.com/SkillCorner/opendata) |
 
 ### Data Attribution & License Notices
 
@@ -148,3 +113,13 @@ SAM-Analytics-2027.md                    technical report
 ## Code License
 
 The source code in this repository is distributed under the license specified in [`LICENSE`](LICENSE). This code license governs only the software in this repository and does not supersede the individual licenses of the external datasets listed above.
+
+---
+
+## Authors
+
+**Team `SAM-Analytics-2027`**
+
+- **Stefano Baso** — [GitHub](https://github.com/AiREdward) | [LinkedIn](https://www.linkedin.com/in/stefano-baso-707310286/)
+- **Armando Mio** — [GitHub](https://github.com/armando-mio) | [LinkedIn](https://www.linkedin.com/in/armando-mio/)
+- **Matteo Vezzoli** — [GitHub](https://github.com/matteovezzoli) | [LinkedIn](https://www.linkedin.com/in/matteo-vezzoli83/)
