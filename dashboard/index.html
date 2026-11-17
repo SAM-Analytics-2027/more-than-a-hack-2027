@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Confronto Possesso</title>
+  <title>Possession Comparison</title>
   <style>
     :root {
       --bg: #f3f5f8;
@@ -411,33 +411,33 @@
 <body>
 
   <nav class="nav-bar">
-    <a href="/" class="nav-active">Barça-Athletic — 5 minuti pubblici</a>
-    <a href="/esterne">Partite esterne (DFL + Metrica)</a>
-    <span class="nav-note">17 possessi: utili per controllare il file, troppo pochi per scegliere un modello.</span>
+    <a href="/" class="nav-active">Barça-Athletic — public 5 minutes</a>
+    <a href="/external">External matches (DFL + Metrica)</a>
+    <span class="nav-note">17 possessions: useful to check the file, too few to choose a model.</span>
   </nav>
 
-  <!-- 1. CONFRONTO TEMPORALE (STRISCE) -->
+  <!-- 1. TIMELINE COMPARISON (STRIPS) -->
   <section class="card">
     <div class="section-top">
       <div class="section-title-group">
-        <h2>Confronto Temporale</h2>
+        <h2>Timeline Comparison</h2>
         <span class="context-pill" id="rangeInfo"></span>
       </div>
       <div class="legend-bar">
-        <span class="leg-item"><span class="swatch" style="background:var(--barca)"></span> Barcellona (H)</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--barca)"></span> Barcelona (H)</span>
         <span class="leg-item"><span class="swatch" style="background:var(--athletic)"></span> Athletic (A)</span>
-        <span class="leg-item"><span class="swatch" style="background:var(--dead)"></span> Gioco Fermo (D)</span>
-        <span class="leg-item"><span class="swatch" style="background:var(--ok)"></span> Corretto</span>
-        <span class="leg-item"><span class="swatch" style="background:var(--err)"></span> Errore</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--dead)"></span> Dead Ball (D)</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--ok)"></span> Correct</span>
+        <span class="leg-item"><span class="swatch" style="background:var(--err)"></span> Error</span>
       </div>
     </div>
 
     <div class="controls-row">
       <div class="btn-group">
-        <button id="btnPreset5m" class="active-preset">Primi 5 Minuti (Soluzione Vera)</button>
-        <button id="btnPresetH1">1° Tempo</button>
-        <button id="btnPresetH2">2° Tempo</button>
-        <button id="btnPresetAll">Intero Video</button>
+        <button id="btnPreset5m" class="active-preset">First 5 Minutes (Ground Truth)</button>
+        <button id="btnPresetH1">1st Half</button>
+        <button id="btnPresetH2">2nd Half</button>
+        <button id="btnPresetAll">Whole Video</button>
       </div>
       <div class="btn-group">
         <button id="btnZoomIn">Zoom +</button>
@@ -453,12 +453,12 @@
     </div>
   </section>
 
-  <!-- 2. TABELLA PRIMI 5 MINUTI (VS SOLUZIONE VERA) -->
+  <!-- 2. FIRST 5 MINUTES TABLE (VS GROUND TRUTH) -->
   <section class="card">
     <div class="section-top">
       <div class="section-title-group">
-        <h2>Primi 5 Minuti — Scostamento dalla Soluzione Vera</h2>
-        <span class="context-pill">1°T 00:00 → 05:00 · 7.500 frame · 300,0 s</span>
+        <h2>First 5 Minutes — Deviation from the Ground Truth</h2>
+        <span class="context-pill">1H 00:00 → 05:00 · 7,500 frames · 300.0 s</span>
       </div>
     </div>
     <div class="table-wrap">
@@ -466,14 +466,14 @@
         <thead>
           <tr>
             <th>File</th>
-            <th class="num">Voto Azioni (spellF1)</th>
-            <th class="num">Voto Frame (macroF1)</th>
-            <th>Frame Uguali / Errori</th>
-            <th>Azioni Individuate (H+A)</th>
-            <th>Cambi di Stato</th>
+            <th class="num">Possession Score (spellF1)</th>
+            <th class="num">Frame Score (macroF1)</th>
+            <th>Matching Frames / Errors</th>
+            <th>Possessions Found (H+A)</th>
+            <th>State Changes</th>
             <th class="num">Barça (H)</th>
             <th class="num">Athletic (A)</th>
-            <th class="num">Gioco Fermo (D)</th>
+            <th class="num">Dead Ball (D)</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -481,12 +481,12 @@
     </div>
   </section>
 
-  <!-- 3. TABELLA INTERA PARTITA -->
+  <!-- 3. WHOLE MATCH TABLE -->
   <section class="card">
     <div class="section-top">
       <div class="section-title-group">
-        <h2>Intera Partita — 1° Tempo + 2° Tempo</h2>
-        <span class="context-pill">158.857 frame valutati · 105,9 min</span>
+        <h2>Whole Match — 1st Half + 2nd Half</h2>
+        <span class="context-pill">158,857 graded frames · 105.9 min</span>
       </div>
     </div>
     <div class="table-wrap">
@@ -494,13 +494,13 @@
         <thead>
           <tr>
             <th>File</th>
-            <th>Azioni Totali (H+A)</th>
-            <th class="num">Durata Media Azione</th>
-            <th class="num">Cambi di Stato Totali</th>
+            <th>Total Possessions (H+A)</th>
+            <th class="num">Mean Possession Duration</th>
+            <th class="num">Total State Changes</th>
             <th class="num">Barça (H)</th>
             <th class="num">Athletic (A)</th>
-            <th class="num">Gioco Fermo (D)</th>
-            <th class="num">Possesso Vivo (H / A)</th>
+            <th class="num">Dead Ball (D)</th>
+            <th class="num">Live Possession (H / A)</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -512,11 +512,11 @@
 
   <script>
     const CODE_NAMES = ["H", "A", "D", "X"];
-    const CODE_LABELS_IT = {
-      0: "H · Barcellona",
+    const CODE_LABELS = {
+      0: "H · Barcelona",
       1: "A · Athletic",
-      2: "D · Gioco Fermo",
-      3: "X · Non valutato"
+      2: "D · Dead Ball",
+      3: "X · Not graded"
     };
     const CODE_COLORS = {
       0: "#2563eb",
@@ -621,16 +621,11 @@
       const h2 = DATA.halves[1];
       if (frame >= h1.start && frame <= h1.end) {
         const s = (frame - h1.start) / fps;
-        return `1°T ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+        return `1H ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
       }
       if (frame >= h2.start && frame <= h2.end) {
-        const ko2 = 113742;
-        if (frame < ko2) {
-          const rem = Math.ceil((ko2 - frame) / fps);
-          return `Pre-2°T (−${rem}s)`;
-        }
-        const s = 45 * 60 + (frame - ko2) / fps;
-        return `2°T ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+        const s = 45 * 60 + (frame - h2.start) / fps;
+        return `2H ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
       }
       return `Video ${formatVideoTime(frame, fps)}`;
     }
@@ -697,7 +692,7 @@
       wrap.innerHTML = DATA.submissions.map(s => `
         <label class="toggle-chip">
           <input type="checkbox" data-model="${s.name}" ${visibleModels.has(s.name) ? "checked" : ""} />
-          <span>${s.name}${s.is_baseline ? "" : '<span class="tag-ours">NOSTRO</span>'}</span>
+          <span>${s.name}${s.is_baseline ? "" : '<span class="tag-ours">OURS</span>'}</span>
         </label>
       `).join("");
 
@@ -823,7 +818,7 @@
 
       ctx.fillStyle = "#334155";
       ctx.font = "bold 12.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-      ctx.fillText("File (Azioni · Cambi nel tratto)", 12, 22);
+      ctx.fillText("File (Possessions · Changes in view)", 12, 22);
 
       // Time ticks
       const targetTicks = Math.max(4, Math.floor(plotW / 120));
@@ -851,7 +846,7 @@
 
       let y = axisH;
 
-      // 1. Soluzione Vera Row
+      // 1. Ground truth row
       ctx.fillStyle = "#fefce8";
       ctx.fillRect(0, y, cssW, gtRowH);
       ctx.strokeStyle = "#facc15";
@@ -863,11 +858,11 @@
       const gtWinSt = windowStatsFromRle(DATA.gt_rle, viewStart, viewEnd);
       ctx.fillStyle = "#854d0e";
       ctx.font = "bold 13.5px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-      ctx.fillText("★ Soluzione Vera (5 min)", 12, y + 22);
+      ctx.fillText("★ Ground Truth (5 min)", 12, y + 22);
       ctx.fillStyle = "#a16207";
       ctx.font = "600 12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
       ctx.fillText(
-        gtWinSt.hasGraded ? `${gtWinSt.actions} azioni · ${gtWinSt.changes} cambi` : "Non presente in questo tratto",
+        gtWinSt.hasGraded ? `${gtWinSt.actions} possessions · ${gtWinSt.changes} changes` : "Not present in this stretch",
         12,
         y + 40
       );
@@ -902,9 +897,9 @@
         if (fullyInsideGt && gtWinSt.hasGraded) {
           const dA = signedInt(st.actions - gtWinSt.actions);
           const dC = signedInt(st.changes - gtWinSt.changes);
-          subLine = `${st.actions} az. (${dA}) · ${st.changes} cambi (${dC}) · ${agree !== null ? agree.toFixed(1) + '%' : ''}`;
+          subLine = `${st.actions} poss. (${dA}) · ${st.changes} changes (${dC}) · ${agree !== null ? agree.toFixed(1) + '%' : ''}`;
         } else {
-          subLine = `${st.actions} azioni · ${st.changes} cambi`;
+          subLine = `${st.actions} possessions · ${st.changes} changes`;
           if (agree !== null) subLine += ` · 5m: ${agree.toFixed(1)}%`;
         }
 
@@ -937,21 +932,21 @@
       let html = `
         <tr class="gt-ref-row">
           <td>
-            <div class="val-main">BAR-ATH_possession_gt_public <span class="tag-gt">SOLUZIONE VERA</span></div>
+            <div class="val-main">BAR-ATH_possession_gt_public <span class="tag-gt">GROUND TRUTH</span></div>
           </td>
-          <td class="num"><div class="val-main">100,0</div></td>
-          <td class="num"><div class="val-main">100,0</div></td>
+          <td class="num"><div class="val-main">100.0</div></td>
+          <td class="num"><div class="val-main">100.0</div></td>
           <td>
-            <div class="val-main">100,0% uguali</div>
-            <div class="val-sub">0,0s di errore (7.500 / 7.500 frame)</div>
-          </td>
-          <td>
-            <div class="val-main">${g.n_spells} azioni</div>
-            <div class="val-sub">${g.n_spells_H} Barça · ${g.n_spells_A} Athletic · media ${g.mean_dur_s.toFixed(1)}s</div>
+            <div class="val-main">100.0% matching</div>
+            <div class="val-sub">0.0s of error (7,500 / 7,500 frames)</div>
           </td>
           <td>
-            <div class="val-main">${g.n_transitions} cambi</div>
-            <div class="val-sub">${g.n_dead_blocks} periodi di gioco fermo</div>
+            <div class="val-main">${g.n_spells} possessions</div>
+            <div class="val-sub">${g.n_spells_H} Barça · ${g.n_spells_A} Athletic · mean ${g.mean_dur_s.toFixed(1)}s</div>
+          </td>
+          <td>
+            <div class="val-main">${g.n_transitions} changes</div>
+            <div class="val-sub">${g.n_dead_blocks} dead-ball periods</div>
           </td>
           <td class="num">
             <div class="val-main">${g.sec_H.toFixed(1)} s</div>
@@ -973,7 +968,7 @@
         const spell = (s.spell_f1_mean * 100).toFixed(1);
         const macro = (s.macro_f1 * 100).toFixed(1);
 
-        let errDetail = `Squadra: ${s.err_swap_ha_s.toFixed(1)}s · Fermo: ${s.err_dead_alive_s.toFixed(1)}s`;
+        let errDetail = `Team: ${s.err_swap_ha_s.toFixed(1)}s · Dead/live: ${s.err_dead_alive_s.toFixed(1)}s`;
         if (s.err_abstain_x_s > 0.05) {
           errDetail += ` · X: ${s.err_abstain_x_s.toFixed(1)}s`;
         }
@@ -981,7 +976,7 @@
         return `
           <tr class="${isSel ? 'selected-row' : ''}" data-pick="${s.name}" style="cursor:pointer">
             <td>
-              <div class="val-main">#${s.rank} · ${s.name}${s.is_baseline ? '' : '<span class="tag-ours">NOSTRO</span>'}</div>
+              <div class="val-main">#${s.rank} · ${s.name}${s.is_baseline ? '' : '<span class="tag-ours">OURS</span>'}</div>
             </td>
             <td class="num">
               <div class="val-main">${spell}</div>
@@ -992,16 +987,16 @@
               <div class="val-sub">F1 D: ${(s.per_class.D.f1 * 100).toFixed(1)}</div>
             </td>
             <td>
-              <div class="val-main">${s.accuracy_pct.toFixed(1)}% <span class="diff-pill ${s.err_s <= 60 ? 'diff-good' : (s.err_s <= 88 ? 'diff-warn' : 'diff-bad')}">errore ${s.err_s.toFixed(1)}s</span></div>
+              <div class="val-main">${s.accuracy_pct.toFixed(1)}% <span class="diff-pill ${s.err_s <= 60 ? 'diff-good' : (s.err_s <= 88 ? 'diff-warn' : 'diff-bad')}">error ${s.err_s.toFixed(1)}s</span></div>
               <div class="val-sub">${errDetail}</div>
             </td>
             <td>
-              <div class="val-main">${s.n_spells_5m} azioni ${diffBadgeInt(s.diff_spells_5m, 3, 10)}</div>
-              <div class="val-sub">Centrate ${s.spells_matched_50}/${g.n_spells} · media ${s.mean_dur_5m_s.toFixed(1)}s (${signedSec(s.diff_dur_5m_s)})</div>
+              <div class="val-main">${s.n_spells_5m} possessions ${diffBadgeInt(s.diff_spells_5m, 3, 10)}</div>
+              <div class="val-sub">Matched ${s.spells_matched_50}/${g.n_spells} · mean ${s.mean_dur_5m_s.toFixed(1)}s (${signedSec(s.diff_dur_5m_s)})</div>
             </td>
             <td>
-              <div class="val-main">${s.n_trans_5m} cambi ${diffBadgeInt(s.diff_trans_5m, 5, 18)}</div>
-              <div class="val-sub">Presi ${s.trans_matched_1s}/${g.n_transitions} · extra ${s.trans_spurious_1s}</div>
+              <div class="val-main">${s.n_trans_5m} changes ${diffBadgeInt(s.diff_trans_5m, 5, 18)}</div>
+              <div class="val-sub">Caught ${s.trans_matched_1s}/${g.n_transitions} · extra ${s.trans_spurious_1s}</div>
             </td>
             <td class="num">
               <div class="val-main">${s.sec_H_5m.toFixed(1)} s ${diffBadgeSec(s.diff_sec_H_5m, 5, 18)}</div>
@@ -1036,15 +1031,15 @@
         return `
           <tr class="${isSel ? 'selected-row' : ''}" data-pick="${s.name}" style="cursor:pointer">
             <td>
-              <div class="val-main">#${s.rank} · ${s.name}${s.is_baseline ? '' : '<span class="tag-ours">NOSTRO</span>'}</div>
+              <div class="val-main">#${s.rank} · ${s.name}${s.is_baseline ? '' : '<span class="tag-ours">OURS</span>'}</div>
             </td>
             <td>
-              <div class="val-main">${fm.n_spells_full} azioni</div>
-              <div class="val-sub">1°T: ${fm.n_spells_h1} · 2°T: ${fm.n_spells_h2} (${fm.n_spells_H} H, ${fm.n_spells_A} A)</div>
+              <div class="val-main">${fm.n_spells_full} possessions</div>
+              <div class="val-sub">1H: ${fm.n_spells_h1} · 2H: ${fm.n_spells_h2} (${fm.n_spells_H} H, ${fm.n_spells_A} A)</div>
             </td>
             <td class="num">
               <div class="val-main">${fm.mean_dur_full_s.toFixed(1)} s</div>
-              <div class="val-sub">mediana ${fm.median_dur_full_s.toFixed(1)} s</div>
+              <div class="val-sub">median ${fm.median_dur_full_s.toFixed(1)} s</div>
             </td>
             <td class="num">
               <div class="val-main">${fm.n_trans_full}</div>
@@ -1150,7 +1145,7 @@
         const gtCode = codeAtFrame(DATA.gt_rle, frame);
 
         let html = `<div class="tt-title">${formatMatchClock(frame, DATA.fps)} · Frame ${frame}</div>`;
-        html += `<div class="tt-row"><span><b>Soluzione Vera:</b></span><span class="pill pill-${CODE_NAMES[gtCode]}">${CODE_LABELS_IT[gtCode]}</span></div>`;
+        html += `<div class="tt-row"><span><b>Ground truth:</b></span><span class="pill pill-${CODE_NAMES[gtCode]}">${CODE_LABELS[gtCode]}</span></div>`;
 
         DATA.submissions.filter(s => visibleModels.has(s.name)).forEach(s => {
           const c = codeAtFrame(s.rle, frame);

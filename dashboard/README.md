@@ -1,44 +1,46 @@
-# Confronto Visuale Risultati (`dashboard/`)
+# Visual Comparison of Results (`dashboard/`)
 
-Mini-webapp leggera a **tema chiaro**, **100% indipendente e in sola lettura**, pensata per confrontare in modo semplice e immediato:
-- la **Soluzione Esatta dei primi 5 minuti** (`evaluation/gt/BAR-ATH_possession_gt_public.csv`);
-- i nostri algoritmi (`possession_v2.csv`, ecc.);
-- i **4 file base** forniti dagli organizzatori (`baseline_raw`, `baseline_smooth25`, `baseline_smooth50`, `baseline_smooth125`).
+A small, light-themed web app, **independent of the model and read-only**, to compare at a glance:
+- the **ground truth of the first 5 minutes** (`evaluation/gt/BAR-ATH_possession_gt_public.csv`);
+- our models (`evaluation/results/SAM-model.csv` and any other trial);
+- the **4 baselines** provided by the organisers (`baseline_raw`, `baseline_smooth25`, `baseline_smooth50`, `baseline_smooth125`).
 
-> **Sicurezza totale:** legge i file `.csv` in memoria RAM, **non scrive mai su disco**, non tocca l'algoritmo e non modifica alcun dato.
+> It reads the `.csv` files in memory, **never writes to disk**, does not touch the model and does not change any data.
 
 ---
 
-## Come avviarla
+## How to start it
 
-- **Doppio click (Windows):** apri `avvia_dashboard.bat` dentro questa cartella.
-- **Oppure da terminale** (dalla cartella `more-than-a-hack-2027`):
-  ```powershell
-  .\.venv\Scripts\python.exe dashboard\app.py
+- **Double click (Windows):** open `start_dashboard.bat` in this folder.
+- **Or from a terminal** (from the repository root):
+  ```bash
+  python dashboard/app.py
   ```
 
-Quando generi un nuovo file `.csv` in `evaluation/results/`, ti basta aggiornare la pagina del browser (`F5`).
+When a new `.csv` file appears in `evaluation/results/`, refresh the browser page (`F5`).
 
 ---
 
-## Cosa mostra (3 sezioni semplici)
+## What it shows (3 sections)
 
-1. **Strisce Temporali del Possesso:** barre colorate allineate fotogramma per fotogramma (`H` Blu = Barcellona, `A` Arancione = Athletic Club, `D` Grigio = Gioco Fermo) con striscia **Verde / Rossa** sotto ogni modello (uguale / diverso dalla Soluzione Esatta), zoom con la rotellina del mouse e conteggio in tempo reale di **azioni e cambi** per ciascuna riga.
-2. **Tabella Primi 5 Minuti (confronto diretto con la Soluzione Esatta):** la prima riga gialla riporta i numeri veri al 100% (`17 azioni`, `20 cambi`, `300,0s`); ogni riga sottostante mostra per ciascun algoritmo i voti ufficiali (`0–100`), quanti fotogrammi/secondi sbaglia (divisi tra *squadra invertita* e *vivo/fermo*), quante azioni e cambi individua e di quanto si discosta dalla soluzione esatta.
-3. **Tabella Intera Partita (1° Tempo + 2° Tempo):** azioni totali, durata media, cambi totali e percentuali `H / A / D` su tutti i 158.857 fotogrammi valutati della gara.
+1. **Possession timelines:** coloured bars aligned frame by frame (`H` blue = Barcelona, `A` orange = Athletic Club, `D` grey = dead ball), with a **green / red** strip under each model (same as / different from the ground truth), mouse-wheel zoom and a live count of **possessions and changes** for each row.
+2. **First 5 minutes table (direct comparison with the ground truth):** the first, yellow row holds the true numbers (`17 possessions`, `20 changes`, `300.0 s`); each row below shows, for each file, the official scores (`0–100`), how many frames/seconds it gets wrong (split between *teams swapped* and *dead/live*), how many possessions and changes it finds and how far it is from the ground truth.
+3. **Whole match table (1st half + 2nd half):** total possessions, mean duration, total changes and `H / A / D` shares over all the 158,857 graded frames.
+
+The public 5 minutes hold only 17 possessions: they are for checking that a file is right, not for choosing between models.
 
 ---
 
-## Seconda pagina: Partite Esterne (`/esterne`)
+## Second page: external matches (`/external`)
 
-Il pulsante **Partite esterne (DFL + Metrica)** in alto apre il confronto sulle **10 partite esterne sporcate** (7 DFL + 3 Metrica): circa 16 ore di gioco e 4.000 possessi veri, contro i 17 dei 5 minuti pubblici. È la pagina su cui **scegliere** tra i modelli; i 5 minuti servono a controllare che il file di Barça-Athletic sia giusto.
+The **External matches (DFL + Metrica)** button at the top opens the comparison on the **10 degraded external matches** (7 DFL + 3 Metrica): about 16 hours of play and 4,000 true possessions. This is the page on which to **choose** between models.
 
-**Come si giudica:** partite intere, **etichette originali** delle versioni pulite (`data/altre_partite/<fonte>_pulite/<id>/<id>_possession_gt.csv`), stesso codice ufficiale del punteggio (`evaluation/possession_metrics.py`), con un frame `X` tra i due tempi come nell'intervallo di Barça-Athletic.
+**How it judges:** whole matches, **original labels** of the clean versions (`data/external/<source>_clean/<id>/<id>_possession_gt.csv`), the same official scoring code (`evaluation/possession_metrics.py`), with one `X` frame between the two halves as at half-time in Barça-Athletic.
 
-**Come si aggiunge un modello:** una cartella per modello in `data/risultati_esterne/<nome_modello>/`, con un file per partita (`J03WMX.csv`, …, `Sample_Game_3.csv`) nello stesso formato del file di Barça-Athletic (`frame,label`, una riga per frame della partita). Ogni partita va prevista da un modello che **non l'ha vista in allenamento** (né la sporcata né la pulita), lasciandola fuori a turno; altrimenti il punteggio esce gonfiato. Come per `evaluation/results/`, tutto resta in `data/` e GitHub non lo vede.
+**How to add a model:** one folder per model in `data/external_results/<model_name>/`, with one file per match (`J03WMX.csv`, …, `Sample_Game_3.csv`) in the same format as the Barça-Athletic file (`frame,label`, one row per frame of the match). `python models/reproduce.py external` writes them for the frozen model. Each match must be predicted by a model that **has not seen it in training** (neither the degraded nor the clean version), leaving it out in turn; otherwise the score is inflated. As with `evaluation/results/`, everything stays in `data/` and GitHub does not see it.
 
-**Cosa mostra:**
-1. **Riepilogo:** per ogni modello lo spellF1 medio sulle 10 partite, per fonte (DFL, Metrica), la **stabilità** (partita peggiore – migliore), il macroF1 e in quante partite è il migliore.
-2. **Partita per partita:** lo spellF1 di ogni modello su ogni partita (bordo verde = migliore della partita); clic su una colonna per aprirla.
-3. **Strisce temporali** della partita scelta, come nella prima pagina, con la striscia verde/rossa su tutta la partita.
-4. **Tabella della partita scelta**, con le stesse colonne della tabella dei 5 minuti ma sull'intera partita.
+**What it shows:**
+1. **Summary:** for each model, the mean spellF1 over the 10 matches, per source (DFL, Metrica), the **stability** (worst – best match), the macroF1 and in how many matches it is the best.
+2. **Match by match:** the spellF1 of every model on every match (green border = best on that match); click on a column to open it.
+3. **Timelines** of the selected match, as on the first page, with the green/red strip over the whole match.
+4. **Table of the selected match**, with the same columns as the 5-minute table but over the whole match.

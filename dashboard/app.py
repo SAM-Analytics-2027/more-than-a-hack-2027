@@ -5,8 +5,8 @@ Completely independent from any possession algorithm:
   - Automatically discovers every *.csv in evaluation/results/ and compares them against
     evaluation/gt/BAR-ATH_possession_gt_public.csv (exact 5-minute solution) and across
     the entire 90-minute match.
-  - Second page (/esterne): the 10 external matches (7 DFL + 3 Metrica, dirtied like BAR-ATH),
-    comparing every model folder in data/risultati_esterne/ against the original labels over
+  - Second page (/external): the 10 external matches (7 DFL + 3 Metrica, degraded like BAR-ATH),
+    comparing every model folder in data/external_results/ against the original labels over
     whole matches. This is the page to CHOOSE models on; the 5 minutes are for checking only.
 
 Usage:
@@ -263,26 +263,26 @@ def build_dashboard_payload() -> dict:
 
 
 # ------------------------------------------------------------------------------------------------
-# Seconda pagina: le 10 partite esterne (7 DFL + 3 Metrica), sporcate come Barça-Athletic
+# Second page: the 10 external matches (7 DFL + 3 Metrica), degraded like Barça-Athletic
 # ------------------------------------------------------------------------------------------------
-# La soluzione vera di ogni partita sta in data/altre_partite/<fonte>_pulite/<id>/<id>_possession_gt.csv
-# (le etichette originali, mai corrette). Le risposte dei modelli stanno in
-# data/risultati_esterne/<modello>/<id>.csv, nello stesso formato del file di Barça-Athletic (frame,label), e
-# devono essere previste SENZA aver visto quella partita in allenamento. Tutto resta dentro data/,
-# quindi GitHub non lo vede.
+# The ground truth of each match is in data/external/<source>_clean/<id>/<id>_possession_gt.csv
+# (the original labels, never corrected). The model answers are in
+# data/external_results/<model>/<id>.csv, in the same format as the Barça-Athletic file (frame,label), and
+# must be predicted WITHOUT having seen that match in training. Everything stays inside data/,
+# so GitHub does not see it.
 
 DATA_DIR = os.environ.get("MTAH_DATA_DIR") or os.path.join(ROOT, "data")
-EXT_MATCH_DIR = os.path.join(DATA_DIR, "altre_partite")
-EXT_RESULTS_DIR = os.path.join(DATA_DIR, "risultati_esterne")
+EXT_MATCH_DIR = os.path.join(DATA_DIR, "external")
+EXT_RESULTS_DIR = os.path.join(DATA_DIR, "external_results")
 EXT_SOURCES = (("dfl", "DFL"), ("metrica", "Metrica"))
 EXT_FPS = 25.0
 
 
 def _ext_matches() -> list:
-    """[(fonte, nome fonte, id, csv della soluzione, xml)] delle partite esterne con la soluzione."""
+    """[(source, source name, id, ground-truth csv, xml)] of the external matches that have a ground truth."""
     out = []
     for src, label in EXT_SOURCES:
-        for folder in sorted(glob.glob(os.path.join(EXT_MATCH_DIR, src + "_pulite", "*"))):
+        for folder in sorted(glob.glob(os.path.join(EXT_MATCH_DIR, src + "_clean", "*"))):
             mid = os.path.basename(folder)
             gt = os.path.join(folder, f"{mid}_possession_gt.csv")
             if os.path.isfile(gt):
@@ -291,7 +291,7 @@ def _ext_matches() -> list:
 
 
 def _ext_halves(xml_path: str, n_frames: int) -> list:
-    """[(tempo, primo frame, ultimo frame)] dai parametri dell'XML (che contano i frame da 1)."""
+    """[(half, first frame, last frame)] from the XML parameters (which count frames from 1)."""
     params = {}
     try:
         for el in ET.parse(xml_path).getroot().iter():
@@ -309,7 +309,7 @@ def _ext_halves(xml_path: str, n_frames: int) -> list:
 
 
 def _ext_teams(xml_path: str) -> tuple:
-    """(casa, ospiti) dall'XML; None se i nomi sono generici (le partite Metrica dicono solo Home/Away)."""
+    """(home, away) from the XML; None if the names are generic (the Metrica matches only say Home/Away)."""
     try:
         names = [el.findtext("Name") for el in ET.parse(xml_path).getroot().iter()
                  if el.tag.split("}")[-1] == "Team"]
@@ -321,7 +321,7 @@ def _ext_teams(xml_path: str) -> tuple:
 
 
 def _with_halftime_gap(codes: np.ndarray, halves: list) -> np.ndarray:
-    """Un frame X tra i due tempi: nessun possesso può scavalcare l'intervallo, come in Barça-Athletic."""
+    """One X frame between the two halves: no possession can cross half-time, as in Barça-Athletic."""
     if len(halves) < 2:
         return codes
     cut = halves[1][1]
@@ -329,7 +329,7 @@ def _with_halftime_gap(codes: np.ndarray, halves: list) -> np.ndarray:
 
 
 def _ext_compare(gt_codes: np.ndarray, pred_codes: np.ndarray, halves: list, fps: float) -> dict:
-    """Gli stessi numeri della tabella di Barça-Athletic, ma sull'intera partita."""
+    """The same numbers as the Barça-Athletic table, but over the whole match."""
     g = _with_halftime_gap(gt_codes, halves)
     p = _with_halftime_gap(pred_codes, halves)
     ev = pm.evaluate(g, p)
@@ -384,7 +384,7 @@ def _ext_gt_summary(gt_codes: np.ndarray, halves: list, fps: float) -> dict:
 
 
 def build_external_payload() -> dict:
-    """Soluzioni delle 10 partite esterne e risposte di ogni modello in data/risultati_esterne/."""
+    """Ground truth of the 10 external matches and answers of every model in data/external_results/."""
     models = sorted(
         d for d in os.listdir(EXT_RESULTS_DIR) if os.path.isdir(os.path.join(EXT_RESULTS_DIR, d))
     ) if os.path.isdir(EXT_RESULTS_DIR) else []
@@ -407,7 +407,7 @@ def build_external_payload() -> dict:
                     skipped.append({"name": f"{m}/{mid}", "reason": reason})
                     continue
                 pred = pm.label_codes(df)
-            except Exception as exc:  # un file rotto non deve fermare la pagina
+            except Exception as exc:  # a broken file must not stop the page
                 skipped.append({"name": f"{m}/{mid}", "reason": str(exc)})
                 continue
             row = _ext_compare(gt_codes, pred, halves, EXT_FPS)
@@ -558,8 +558,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif route in ("/esterne", "/esterne.html"):
-            with open(os.path.join(HERE, "esterne.html"), "rb") as f:
+        elif route in ("/external", "/external.html"):
+            with open(os.path.join(HERE, "external.html"), "rb") as f:
                 body = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -567,7 +567,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif route == "/api/esterne":
+        elif route == "/api/external":
             body = ExternalCache.get()
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -587,13 +587,13 @@ def main() -> int:
     parser.add_argument("--no-browser", action="store_true", help="Do not auto-open web browser")
     args = parser.parse_args()
 
-    print("Caricamento risultati in sola lettura da evaluation/results/ ...", flush=True)
+    print("Loading results read-only from evaluation/results/ ...", flush=True)
     DashboardCache.refresh()
 
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     url = f"http://{args.host}:{args.port}"
-    print(f"\nDashboard attiva su:  {url}", flush=True)
-    print("Premi Ctrl+C per chiudere il server.\n", flush=True)
+    print(f"\nDashboard running at:  {url}", flush=True)
+    print("Press Ctrl+C to stop the server.\n", flush=True)
 
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
@@ -601,7 +601,7 @@ def main() -> int:
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nChiusura dashboard.", flush=True)
+        print("\nDashboard closed.", flush=True)
     finally:
         server.server_close()
     return 0

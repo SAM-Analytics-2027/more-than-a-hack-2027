@@ -1,0 +1,8 @@
+# Libraries used to prepare and degrade the external matches (data_prep/*.py).
+# Exact versions with which everything was run and checked, with Python 3.11.13.
+# Installation, from the repository root: pip install -r data_prep/requirements.txt
+numpy==2.3.5
+scipy==1.17.1
+kloppy==3.18.0
+pandas==3.0.1
+lxml==6.0.2
