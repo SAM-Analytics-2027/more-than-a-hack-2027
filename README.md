@@ -60,8 +60,8 @@ The script runs four steps in under a minute:
 
 1. `python models/reproduce.py check --barca-only` checks the library versions and the SHA-256 fingerprints of the two competition tracking files;
 2. `python models/reproduce.py predict` computes the features of the competition match, applies the frozen model in `models/frozen/` and writes `evaluation/results/SAM-model.csv`;
-3. copies it to `SAM-Analytics-2027.csv`;
-4. validates it with `evaluation/validate_submission.py`.
+3. Copies it to `SAM-Analytics-2027.csv`;
+4. Validates it with `evaluation/validate_submission.py`.
 
 ---
 
@@ -69,17 +69,17 @@ The script runs four steps in under a minute:
 
 All from the repository root, with the `mtah` environment active:
 
-| command | what it does |
+| Command | What it does |
 |---|---|
-| `python models/reproduce.py check` | library versions and fingerprints of all data files |
+| `python models/reproduce.py check` | Library versions and fingerprints of all data files |
 | `python models/reproduce.py predict` | Barça–Athletic CSV from the frozen weights (`evaluation/results/SAM-model.csv`) |
-| `python models/reproduce.py external` | out-of-fold answers on the 10 DFL + Metrica matches from the frozen fold models (`data/external_results/SAM-model/`), with their spellF1 |
-| `python models/reproduce.py train --name NAME` | retrains everything from the external matches: 5 folds, Viterbi tuning, final model (weights in `data/cache/models/NAME/`) |
-| `python models/reproduce.py predict --model NAME` | the same as `predict`, with the weights of trial `NAME` |
-| `python dashboard/app.py` | local read-only dashboard comparing the CSVs (see [`dashboard/README.md`](dashboard/README.md)) |
-| `python data_prep/prepare_dfl.py` | downloads and prepares the 7 DFL matches (clean version) |
-| `python data_prep/degradation.py` | degrades the 7 clean DFL matches |
-| `python data_prep/prepare_skillcorner.py` | downloads and prepares the 20 SkillCorner matches (clean and degraded) |
+| `python models/reproduce.py external` | Out-of-fold answers on the 10 DFL + Metrica matches from the frozen fold models (`data/external_results/SAM-model/`), with their spellF1 |
+| `python models/reproduce.py train --name NAME` | Retrains everything from the external matches: 5 folds, Viterbi tuning, final model (weights in `data/cache/models/NAME/`) |
+| `python models/reproduce.py predict --model NAME` | The same as `predict`, with the weights of trial `NAME` |
+| `python dashboard/app.py` | Local read-only dashboard comparing the CSVs (see [`dashboard/README.md`](dashboard/README.md)) |
+| `python data_prep/prepare_dfl.py` | Downloads and prepares the 7 DFL matches (clean version) |
+| `python data_prep/degradation.py` | Degrades the 7 clean DFL matches |
+| `python data_prep/prepare_skillcorner.py` | Downloads and prepares the 20 SkillCorner matches (clean and degraded) |
 
 The scripts in `data_prep/` need `kloppy` and the versions in `data_prep/requirements.txt`. The 3 Metrica matches are prepared with the rules described in the technical report.
 
@@ -120,6 +120,20 @@ The source code in this repository is distributed under the license specified in
 
 **Team `SAM-Analytics-2027`**
 
-- **Stefano Baso** — [GitHub](https://github.com/AiREdward) | [LinkedIn](https://www.linkedin.com/in/stefano-baso-707310286/)
-- **Armando Mio** — [GitHub](https://github.com/armando-mio) | [LinkedIn](https://www.linkedin.com/in/armando-mio/)
-- **Matteo Vezzoli** — [GitHub](https://github.com/matteovezzoli) | [LinkedIn](https://www.linkedin.com/in/matteo-vezzoli83/)
+<table>
+  <tr>
+    <td><strong>Stefano Baso</strong></td>
+    <td><a href="https://github.com/AiREdward">GitHub</a></td>
+    <td><a href="https://www.linkedin.com/in/stefano-baso-707310286/">LinkedIn</a></td>
+  </tr>
+  <tr>
+    <td><strong>Armando Mio</strong></td>
+    <td><a href="https://github.com/armando-mio">GitHub</a></td>
+    <td><a href="https://www.linkedin.com/in/armando-mio/">LinkedIn</a></td>
+  </tr>
+  <tr>
+    <td><strong>Matteo Vezzoli</strong></td>
+    <td><a href="https://github.com/matteovezzoli">GitHub</a></td>
+    <td><a href="https://www.linkedin.com/in/matteo-vezzoli83/">LinkedIn</a></td>
+  </tr>
+</table>
