@@ -624,12 +624,7 @@
         return `1H ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
       }
       if (frame >= h2.start && frame <= h2.end) {
-        const ko2 = 113742;
-        if (frame < ko2) {
-          const rem = Math.ceil((ko2 - frame) / fps);
-          return `Pre-2H (−${rem}s)`;
-        }
-        const s = 45 * 60 + (frame - ko2) / fps;
+        const s = 45 * 60 + (frame - h2.start) / fps;
         return `2H ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
       }
       return `Video ${formatVideoTime(frame, fps)}`;

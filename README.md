@@ -71,7 +71,7 @@ All from the repository root, with the `mtah` environment active:
 
 | command | what it does |
 |---|---|
-| `python models/reproduce.py check` | library versions and fingerprints of every data files |
+| `python models/reproduce.py check` | library versions and fingerprints of all data files |
 | `python models/reproduce.py predict` | Barça–Athletic CSV from the frozen weights (`evaluation/results/SAM-model.csv`) |
 | `python models/reproduce.py external` | out-of-fold answers on the 10 DFL + Metrica matches from the frozen fold models (`data/external_results/SAM-model/`), with their spellF1 |
 | `python models/reproduce.py train --name NAME` | retrains everything from the external matches: 5 folds, Viterbi tuning, final model (weights in `data/cache/models/NAME/`) |
@@ -93,7 +93,7 @@ The first run of `external` or `train` builds a feature cache in `data/cache/` (
 | :--- | :--- | :---: | :--- | :--- | :--- |
 | **DFL / IDSSE Open Data** | German Bundesliga (1st & 2nd Div., 2022/2023) | 7 | Optical TRACAB (25 fps) | CC BY 4.0 | [spoho-datascience/idsse-data](https://github.com/spoho-datascience/idsse-data) |
 | **Metrica Sports Sample Data** | Anonymized Elite Matches | 3 | Optical Tracking (25 fps) | Open Sample (Attribution) | [metrica-sports/sample-data](https://github.com/metrica-sports/sample-data) |
-| **SkillCorner Open Data** | Australian A-League (2024/2025) | 20 | Broadcast Tracking (10 fps) | MIT License | [SkillCorner/opendata](https://github.com/SkillCorner/opendata) |
+| **SkillCorner Open Data** | Australian A-League (2024/2025) | 20 (19 in the final tree models) | Broadcast Tracking (10 fps) | MIT License | [SkillCorner/opendata](https://github.com/SkillCorner/opendata) |
 
 ### Data Attribution & License Notices
 

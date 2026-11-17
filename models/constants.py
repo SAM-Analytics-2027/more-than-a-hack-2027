@@ -280,10 +280,6 @@ W_TREE = 0.15
 W_NETS = 0.85
 ALPHA_LGBM = 0.50
 
-# Maximum distance (in metres) between the tactical and the broadcast player centroids for a broadcast frame
-# to count as live play and not a TV replay, when fusing the ball for Barça–Athletic.
-BROADCAST_MAX_CENTROID_DIST = 12.0
-
 # Name of the reference model
 MODEL_NAME = 'SAM-model'
 NAME = MODEL_NAME

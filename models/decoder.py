@@ -158,7 +158,7 @@ def penalties(T, params, events=None, d_min=None):
 
 def _apply_smart_tagging_priors(cost, period, df=None):
     """Applies Bayesian priors from the official metadata BAR-ATH_tactical_smart_tagging.xml (Barça-Athletic match only):
-    - Before the Kick Off (Start) of each half (e.g. 110808..113660 in the 2nd half), the ball is not in play yet (D).
+    - Before the Kick Off (Start) instance of each half, the ball is not in play yet (D).
     - During goal celebrations (GOALS -> Kick Off After Goal) with no visible ball and players walking, D is reinforced.
     """
     from constants import OUR_FRAMES, FPS
